@@ -21,6 +21,7 @@ import shutil
 import argparse
 import datetime
 import subprocess
+import threading
 from typing import List, Dict, Tuple, Optional
 
 # Ensure project root in sys.path
@@ -84,12 +85,22 @@ def _get_ffmpeg_bin() -> str:
 class SubtitleEngine:
     """Full-cycle YouTube to Burmese Subtitle & Transcript Generation Engine."""
 
-    def __init__(self, output_base_dir: str = "outputs", cookies_path: Optional[str] = None):
+    def __init__(
+        self,
+        output_base_dir: str = "outputs",
+        cookies_path: Optional[str] = None,
+        cancel_event: Optional[threading.Event] = None,
+    ):
         self.output_base_dir = os.path.abspath(output_base_dir)
         self.cookies_path = cookies_path
+        self.cancel_event = cancel_event
         self.config_data = cfg.load_config()
         self.ffmpeg_bin = _get_ffmpeg_bin()
         os.makedirs(self.output_base_dir, exist_ok=True)
+
+    def _check_cancellation(self):
+        if (self.cancel_event and self.cancel_event.is_set()) or os.environ.get("CURRENT_JOB_CANCELLED") == "1":
+            raise InterruptedError("Subtitle generation cancelled by user.")
 
     @staticmethod
     def is_url(path_or_url: str) -> bool:
@@ -112,6 +123,7 @@ class SubtitleEngine:
         print("=" * 65 + "\n")
 
         # ── Step 1: Download / Ingest Video & Subtitles ─────────────────────────
+        self._check_cancellation()
         print("\n--- [Phase: Step 1 - Downloading / Ingesting Video] ---")
         if self.is_url(input_source):
             video_file, initial_subs_file, auto_name, video_metadata = self._fetch_youtube_content(
@@ -167,6 +179,7 @@ class SubtitleEngine:
                 pass
 
         # ── Step 2: Extract / Standardize Segments with Timestamps ──────────────
+        self._check_cancellation()
         print("\n--- [Phase: Step 2 - Extracting Timestamps & Transcripts] ---")
         raw_segments = []
         sub_source_type = "unknown"
@@ -192,12 +205,14 @@ class SubtitleEngine:
         print(f"[OK] Standardized {len(segments)} unique sequential subtitle segments.")
 
         # ── Step 3: Language Detection ──────────────────────────────────────────
+        self._check_cancellation()
         print("\n--- [Phase: Step 3 - Detecting Source Language] ---")
         detected_lang, lang_conf = self._detect_language(segments, declared_lang=source_language)
         print(f"[*] Detected Language: {detected_lang.upper()} (Confidence: {lang_conf:.2f})")
         is_english = detected_lang.lower().startswith("en")
 
         # ── Step 4: Original -> English (if non-English) ─────────────────────────
+        self._check_cancellation()
         print("\n--- [Phase: Step 4 - Translating to Intermediate English] ---")
         if is_english:
             print("[*] Source is English. Standardizing clean English transcript...")
@@ -208,11 +223,13 @@ class SubtitleEngine:
             self._translate_segments(segments, source_field="original", target_field="english", target_lang="English")
 
         # ── Step 5: Dual-Nuance Narrative Burmese Subtitle Translation ──────────
+        self._check_cancellation()
         print("\n--- [Phase: Step 5 - Translating into Natural Storyteller Burmese Subtitles] ---")
         print(f"[*] Translating {len(segments)} segments into Everyday Conversational Burmese (ရုပ်ရှင်/Anime ဇာတ်လမ်းပြန်ပြောဟန်)...")
         self._translate_to_burmese(segments, source_lang=detected_lang)
 
         # ── Step 6: 1:1 Timestamp Alignment & Quality Check ────────────────────
+        self._check_cancellation()
         print("\n--- [Phase: Step 6 - Multi-Level Quality Check & Audit] ---")
         print("[*] Performing Automated Multi-Level Quality Check...")
         qc_report, all_passed = self._perform_quality_check(
@@ -294,7 +311,7 @@ class SubtitleEngine:
 
         video_id = info.get("id", "yt_video")
         title = info.get("title", "video")
-        duration = float(info.get("duration", 0.0))
+        duration = float(info.get("duration") or 0.0)
 
         video_file = ydl_runner.prepare_filename(info)
         base_root = os.path.splitext(video_file)[0]
@@ -528,6 +545,7 @@ class SubtitleEngine:
         total_batches = (len(segments) + batch_size - 1) // batch_size
 
         for b_idx in range(total_batches):
+            self._check_cancellation()
             chunk = segments[b_idx * batch_size : (b_idx + 1) * batch_size]
             items = [s[source_field] for s in chunk]
             print(f"[*] Translating Batch {b_idx + 1}/{total_batches} ({len(chunk)} lines -> {target_lang})...")
@@ -593,6 +611,7 @@ class SubtitleEngine:
         is_non_english = bool(source_lang and not source_lang.lower().startswith("en") and source_lang.lower() != "auto")
 
         for b_idx in range(total_batches):
+            self._check_cancellation()
             chunk = segments[b_idx * batch_size : (b_idx + 1) * batch_size]
             print(f"[*] Burmese Subtitles (Recap Style): Batch {b_idx + 1}/{total_batches} ({len(chunk)} lines)...")
 

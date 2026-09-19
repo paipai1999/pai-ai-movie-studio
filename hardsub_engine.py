@@ -180,7 +180,8 @@ class HardsubEngine:
 
         video_meta = self._probe_video_metadata(video_file)
         video_meta["title"] = title
-        print(f"[OK] Ingestion ready: '{title}' ({video_meta.get('duration', 0.0):.1f}s, {video_meta.get('width', 1920)}x{video_meta.get('height', 1080)})")
+        dur_val = video_meta.get('duration') or 0.0
+        print(f"[OK] Ingestion ready: '{title}' ({dur_val:.1f}s, {video_meta.get('width', 1920)}x{video_meta.get('height', 1080)})")
         return video_file, sub_file, title, video_meta
 
     def _probe_video_metadata(self, video_path: str) -> dict:

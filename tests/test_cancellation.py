@@ -15,10 +15,7 @@ class TestCancellation(unittest.TestCase):
         os.environ["CURRENT_JOB_CANCELLED"] = "0"
 
     def tearDown(self):
-        if self.orig_cancel_env is not None:
-            os.environ["CURRENT_JOB_CANCELLED"] = self.orig_cancel_env
-        else:
-            os.environ.pop("CURRENT_JOB_CANCELLED", None)
+        os.environ["CURRENT_JOB_CANCELLED"] = "0"
 
     def test_master_agent_init_not_cancelled(self):
         """Verify MasterAgent starts in non-cancelled state."""

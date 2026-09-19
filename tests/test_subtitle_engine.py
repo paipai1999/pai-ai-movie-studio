@@ -24,10 +24,16 @@ from subtitle_engine import (
 class TestSubtitleEngine(unittest.TestCase):
 
     def setUp(self):
+        self.orig_cancel = os.environ.get("CURRENT_JOB_CANCELLED")
+        os.environ["CURRENT_JOB_CANCELLED"] = "0"
         self.temp_dir = tempfile.mkdtemp()
         self.engine = SubtitleEngine(output_base_dir=self.temp_dir)
 
     def tearDown(self):
+        if self.orig_cancel is not None:
+            os.environ["CURRENT_JOB_CANCELLED"] = self.orig_cancel
+        else:
+            os.environ.pop("CURRENT_JOB_CANCELLED", None)
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_timestamp_formatting_and_parsing(self):
@@ -206,6 +212,18 @@ class TestSubtitleEngine(unittest.TestCase):
         self.assertEqual(segments[0]["burmese"], "တစ်ရက်မှာတော့ သူမ ထွက်လာခဲ့တယ်။")
         # Second item should safely fallback to english rather than reverting the first
         self.assertEqual(segments[1]["burmese"], "She looked around.")
+
+    def test_subtitle_engine_cancellation(self):
+        """Verify SubtitleEngine raises InterruptedError when cancel_event is set."""
+        import threading
+        evt = threading.Event()
+        sub_engine = SubtitleEngine(output_base_dir=self.temp_dir, cancel_event=evt)
+        # Initially not cancelled
+        sub_engine._check_cancellation()
+        # Set cancel event
+        evt.set()
+        with self.assertRaises(InterruptedError):
+            sub_engine._check_cancellation()
 
 
 if __name__ == "__main__":

@@ -492,7 +492,7 @@ def subtitle_worker(
 
     try:
         from subtitle_engine import SubtitleEngine
-        engine = SubtitleEngine(output_base_dir="outputs")
+        engine = SubtitleEngine(output_base_dir="outputs", cancel_event=cancel_events.get(job_id))
         with jobs_lock:
             jobs[job_id]['phase'] = 'Processing Subtitles...'
         print(f"[*] Subtitle Engine: Starting job {job_id} for {input_source}...")
@@ -731,7 +731,7 @@ def batch_worker(
         elif engine_mode == "subtitle":
             from subtitle_engine import SubtitleEngine
             print(f"[*] Batch Subtitle Engine: Starting batch of {total_items} items...")
-            sub_eng = SubtitleEngine(output_base_dir="outputs")
+            sub_eng = SubtitleEngine(output_base_dir="outputs", cancel_event=cancel_events.get(job_id))
             for idx, item in enumerate(inputs_list, 1):
                 if (cancel_events.get(job_id) and cancel_events[job_id].is_set()) or os.environ.get("CURRENT_JOB_CANCELLED") == "1":
                     break
@@ -1915,11 +1915,13 @@ def download_project_zip(movie: str = Query("")):
     if os.path.commonpath([outputs_dir, proj_dir]) != outputs_dir or not os.path.isdir(proj_dir):
         raise HTTPException(status_code=404, detail="Movie project output directory not found")
 
+    from starlette.background import BackgroundTask
     temp_dir = os.path.abspath("temp")
     os.makedirs(temp_dir, exist_ok=True)
     clean_base = re.sub(r'[^a-zA-Z0-9_\-]', '_', safe_movie)[:60].strip('_')
     zip_filename = f"{clean_base}_Bundle.zip"
-    zip_path = os.path.join(temp_dir, f"{clean_base}_bundle.zip")
+    unique_suffix = uuid.uuid4().hex[:8]
+    zip_path = os.path.join(temp_dir, f"{clean_base}_{unique_suffix}_bundle.zip")
 
     excluded_names = {"state.json", "checkpoint.json", "temp", "temp_test_dl"}
 
@@ -1937,11 +1939,19 @@ def download_project_zip(movie: str = Query("")):
                 else:
                     zf.write(file_full, arcname=rel_in_zip, compress_type=zipfile.ZIP_DEFLATED)
 
+    def _cleanup_temp_zip(p: str):
+        try:
+            if os.path.exists(p):
+                os.remove(p)
+        except Exception:
+            pass
+
     return FileResponse(
         zip_path,
         media_type="application/zip",
         filename=zip_filename,
-        headers={"Content-Disposition": f'attachment; filename="{zip_filename}"'}
+        headers={"Content-Disposition": f'attachment; filename="{zip_filename}"'},
+        background=BackgroundTask(_cleanup_temp_zip, zip_path)
     )
 
 @app.get("/api/movies")
@@ -2302,19 +2312,6 @@ def save_keys(req: SaveKeysRequest):
         print(f"[ERROR] Failed to save API keys: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-if __name__ == '__main__':
-    import uvicorn, argparse
-    parser = argparse.ArgumentParser(description="AI Movie Recap Web UI Server")
-    parser.add_argument("--host", type=str, default=None, help="Host to bind to")
-    parser.add_argument("--port", type=int, default=None, help="Port to bind to")
-    args, _ = parser.parse_known_args()
-
-    default_host = "0.0.0.0" if ("COLAB_GPU" in os.environ or "KAGGLE_KERNEL_RUN_TYPE" in os.environ or "COLAB_RELEASE_TAG" in os.environ) else "127.0.0.1"
-    host = args.host or os.getenv("HOST", default_host)
-    port = args.port or int(os.getenv("PORT", 5000))
-    uvicorn.run(app, host=host, port=port, log_level='info')
-
-
 @app.get("/api/subtitle/preview/{movie_name:path}")
 def preview_subtitle_project(movie_name: str):
     safe_name = os.path.normpath(movie_name).strip(" /\\.")
@@ -2343,19 +2340,48 @@ def preview_subtitle_project(movie_name: str):
         with open(txt_file, "r", encoding="utf-8", errors="replace") as f:
             txt_content = f.read()
 
-    records = []
+    raw_records = []
     if os.path.exists(json_file):
         try:
             with open(json_file, "r", encoding="utf-8", errors="replace") as f:
-                records = json.load(f)
+                raw_records = json.load(f)
         except Exception:
             pass
 
+    normalized_records = []
+    for r in raw_records[:300]:
+        s_time = r.get("start_s") if r.get("start_s") is not None else r.get("start_time", 0.0)
+        e_time = r.get("end_s") if r.get("end_s") is not None else r.get("end_time", 0.0)
+        orig = r.get("original") or r.get("original_text") or ""
+        burm = r.get("burmese") or r.get("translated_text") or ""
+        normalized_records.append({
+            "start_time": float(s_time or 0.0),
+            "end_time": float(e_time or 0.0),
+            "original_text": str(orig),
+            "translated_text": str(burm),
+            "speaker_gender": r.get("speaker_gender") or r.get("gender") or "",
+        })
+
     return {
         "project": safe_name,
+        "srt": srt_content,
+        "txt": txt_content,
+        "qc": qc_content,
         "srt_content": srt_content,
         "qc_report": qc_content,
         "transcript_burmese": txt_content,
-        "records": records[:100],
-        "total_records": len(records)
+        "records": normalized_records,
+        "total_records": len(raw_records)
     }
+
+if __name__ == '__main__':
+    import uvicorn, argparse
+    parser = argparse.ArgumentParser(description="AI Movie Recap Web UI Server")
+    parser.add_argument("--host", type=str, default=None, help="Host to bind to")
+    parser.add_argument("--port", type=int, default=None, help="Port to bind to")
+    args, _ = parser.parse_known_args()
+
+    default_host = "0.0.0.0" if ("COLAB_GPU" in os.environ or "KAGGLE_KERNEL_RUN_TYPE" in os.environ or "COLAB_RELEASE_TAG" in os.environ) else "127.0.0.1"
+    host = args.host or os.getenv("HOST", default_host)
+    port = args.port or int(os.getenv("PORT", 5000))
+    uvicorn.run(app, host=host, port=port, log_level='info')
