@@ -1295,6 +1295,9 @@
                 <input class="url-input" type="text" id="input-source"
                     placeholder="Paste YouTube / DramaBox URL or local video path...">
                 
+                <button type="button" class="btn-primary" onclick="pasteToInput('input-source')" style="background:white; border:1px solid rgba(0,0,0,0.1); color:var(--text); box-shadow:0 4px 10px rgba(0,0,0,0.03); flex-shrink:0; white-space:nowrap; padding:0.5rem 0.8rem;" title="Paste URL from Clipboard">
+                    📋 Paste
+                </button>
                 <input type="file" id="file-upload" accept="video/*,.txt" style="display: none;" onchange="handleVideoUpload(this)">
                 <button class="btn-primary" id="btn-upload" style="background: white; border: 1px solid rgba(0,0,0,0.1); color: var(--text); box-shadow: 0 4px 10px rgba(0,0,0,0.03); flex-shrink: 0; white-space: nowrap;" onclick="document.getElementById('file-upload').click()" title="Upload a video file from your computer">
                     <span id="btn-upload-text">📁 Upload</span>
@@ -1551,6 +1554,9 @@
 
             <div class="input-row" style="position:relative; margin-bottom:1rem;">
                 <input class="url-input" type="text" id="input-source-sub" placeholder="Paste YouTube URL or local video path for Subtitle Generation...">
+                <button type="button" class="btn-primary" onclick="pasteToInput('input-source-sub')" style="background:white; border:1px solid rgba(0,0,0,0.1); color:var(--text); box-shadow:0 4px 10px rgba(0,0,0,0.03); flex-shrink:0; white-space:nowrap; padding:0.5rem 0.8rem;" title="Paste URL from Clipboard">
+                    📋 Paste
+                </button>
                 <input type="file" id="file-upload-sub" accept="video/*" style="display:none;" onchange="handleSubVideoUpload(this)">
                 <button class="btn-primary" id="btn-upload-sub" type="button" style="background:white; border:1px solid rgba(0,0,0,0.1); color:var(--text); box-shadow:0 4px 10px rgba(0,0,0,0.03); flex-shrink:0; white-space:nowrap;" onclick="document.getElementById('file-upload-sub').click()" title="Upload video file">
                     <span id="btn-upload-sub-text">📁 Upload</span>
@@ -1611,6 +1617,9 @@
             <!-- Single Input Row for Hardsub -->
             <div class="input-row" style="position:relative; margin-bottom:1rem;">
                 <input class="url-input" type="text" id="input-source-hardsub" placeholder="Paste YouTube / DramaBox URL or local video path for Hardsub...">
+                <button type="button" class="btn-primary" onclick="pasteToInput('input-source-hardsub')" style="background:white; border:1px solid rgba(0,0,0,0.1); color:var(--text); box-shadow:0 4px 10px rgba(0,0,0,0.03); flex-shrink:0; white-space:nowrap; padding:0.5rem 0.8rem;" title="Paste URL from Clipboard">
+                    📋 Paste
+                </button>
                 <input type="file" id="file-upload-hardsub" accept="video/*" style="display:none;" onchange="handleHardsubVideoUpload(this)">
                 <button class="btn-primary" id="btn-upload-hardsub" type="button" style="background:white; border:1px solid rgba(0,0,0,0.1); color:var(--text); box-shadow:0 4px 10px rgba(0,0,0,0.03); flex-shrink:0; white-space:nowrap;" onclick="document.getElementById('file-upload-hardsub').click()" title="Upload video file">
                     <span id="btn-upload-hardsub-text">📁 Upload</span>
@@ -1653,7 +1662,7 @@
                 </div>
                 <div style="display:inline-flex; align-items:center; gap:0.5rem;">
                     <span style="color:var(--muted); font-weight:700; font-size:0.82rem;">🎨 Subtitle Style:</span>
-                    <select class="lang-select" id="select-hardsub-style" style="padding:0.4rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600;">
+                    <select class="lang-select" id="select-hardsub-style" onchange="updateHardsubStylePreview(this.value)" style="padding:0.4rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600;">
                         <option value="box_black" selected>⬛ Cinema Box (Netflix Style)</option>
                         <option value="yellow_pop">🟡 TikTok / Reels Pop (Yellow & Black)</option>
                         <option value="white_stroke">⚪ Classic Movie White (Drop Shadow)</option>
@@ -1699,6 +1708,17 @@
                         <input type="checkbox" id="chk-hardsub-force-whisper">
                         🎙️ Force Whisper STT (အသံမှ စာသားဖမ်းယူရန်)
                     </label>
+                </div>
+            </div>
+
+            <!-- Live Preview Banner for Hardsub Subtitle Style -->
+            <div id="hardsub-style-preview-wrap" style="background:#0f172a; padding:10px 18px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:10px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:1.1rem;">👁️</span>
+                    <span style="font-size:0.8rem; font-weight:700; color:#94a3b8;">စာတန်းထိုး နမူနာ (Live Style Preview):</span>
+                </div>
+                <div id="hardsub-style-preview-box" style="font-family:'Myanmar Text', Padauk, sans-serif; font-size:0.95rem; font-weight:bold; padding:4px 14px; border-radius:4px; background:rgba(0,0,0,0.85); color:#ffffff; transition:all 0.25s ease;">
+                    ကျနော် သတိပေးလိုက်မယ်နော် ခင်ဗျာ။
                 </div>
             </div>
         </div>
@@ -2195,6 +2215,24 @@
         });
     })();
 
+    // ── Clipboard paste helper ──
+    async function pasteToInput(inputId) {
+        try {
+            const text = await navigator.clipboard.readText();
+            if (text && text.trim()) {
+                const el = document.getElementById(inputId);
+                if (el) {
+                    el.value = text.trim();
+                    showToast('📋 Link pasted from clipboard!', 'success');
+                }
+            } else {
+                showToast('Clipboard is empty. Please copy a link first.', 'warn');
+            }
+        } catch (err) {
+            showToast('Please use Ctrl+V to paste link.', 'warn');
+        }
+    }
+
     // ── Engine switch ──
     let currentEngineMode = 'recap';
 
@@ -2207,26 +2245,28 @@
         const panelSub = document.getElementById('subtitle-engine-panel');
         const panelHard = document.getElementById('hardsub-engine-panel');
 
-        const setActive = (btn, isActive, activeColor) => {
+        const setActive = (btn, isActive, activeColor, activeBorder, activeGlow) => {
             if (!btn) return;
             if (isActive) {
                 btn.classList.add('active');
                 btn.style.background = 'white';
                 btn.style.color = activeColor || 'var(--accent)';
-                btn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.06)';
+                btn.style.border = activeBorder || '1px solid rgba(0,0,0,0.1)';
+                btn.style.boxShadow = activeGlow || '0 6px 18px rgba(0,0,0,0.08)';
                 btn.style.opacity = '1';
             } else {
                 btn.classList.remove('active');
                 btn.style.background = 'transparent';
                 btn.style.color = 'var(--text)';
+                btn.style.border = '1px solid transparent';
                 btn.style.boxShadow = 'none';
                 btn.style.opacity = '0.75';
             }
         };
 
-        setActive(btnRecap, engine === 'recap', 'var(--accent)');
-        setActive(btnSub, engine === 'subtitle', '#7c3aed');
-        setActive(btnHard, engine === 'hardsub', '#ff4b2b');
+        setActive(btnRecap, engine === 'recap', '#6366f1', '1px solid rgba(99,102,241,0.4)', '0 6px 20px rgba(99,102,241,0.22)');
+        setActive(btnSub, engine === 'subtitle', '#7c3aed', '1px solid rgba(124,58,237,0.4)', '0 6px 20px rgba(124,58,237,0.22)');
+        setActive(btnHard, engine === 'hardsub', '#ff4b2b', '1px solid rgba(255,75,43,0.4)', '0 6px 20px rgba(255,75,43,0.22)');
 
         if (panelRecap) panelRecap.style.display = (engine === 'recap') ? 'block' : 'none';
         if (panelSub) panelSub.style.display = (engine === 'subtitle') ? 'block' : 'none';
@@ -2582,6 +2622,25 @@
         }
     }
 
+    function updateHardsubStylePreview(val) {
+        if (!val || !SUBTITLE_PRESETS_UI[val]) val = 'box_black';
+        const p = SUBTITLE_PRESETS_UI[val];
+        const previewBox = document.getElementById('hardsub-style-preview-box');
+        if (!previewBox || !p) return;
+        if (p.previewStyle) {
+            previewBox.style.color = p.previewStyle.color || '#ffffff';
+            previewBox.style.background = p.previewStyle.background || 'rgba(0,0,0,0.85)';
+            previewBox.style.textShadow = p.previewStyle.textShadow || 'none';
+            previewBox.style.borderRadius = p.previewStyle.borderRadius || '4px';
+            previewBox.style.padding = p.previewStyle.padding || '4px 14px';
+            if (p.previewStyle.border) {
+                previewBox.style.border = p.previewStyle.border;
+            } else {
+                previewBox.style.border = 'none';
+            }
+        }
+    }
+
     function toggleSubStyleVisibility(mode) {
         const wrap = document.getElementById('sub-style-strip-wrap');
         const card = document.getElementById('sub-style-card');
@@ -2603,6 +2662,9 @@
                 const data = await res.json();
                 if (data && data.current_preset) {
                     selectSubPreset(data.current_preset);
+                    const hardSel = document.getElementById('select-hardsub-style');
+                    if (hardSel) hardSel.value = data.current_preset;
+                    updateHardsubStylePreview(data.current_preset);
                 }
             }
         } catch (e) {
@@ -3517,11 +3579,21 @@
                     const safePath = f.split('/').map(encodeURIComponent).join('/');
                     const url = `/api/outputs/file?path=${safePath}`;
                     if (f.endsWith('.mp4')) {
-                        const isReels = fname.includes('reels');
-                        const vBadge = isReels ? '📱 9:16 Facebook Reels Canvas' : '🎥 16:9 YouTube Standard';
+                        const isReels = fname.includes('reels') || fname.includes('9_16') || fname.includes('vertical');
+                        const isHardsub = (mdata.engine_type === 'hardsub') || fname.includes('hardsub');
+                        let vBadge = isReels ? '📱 9:16 Vertical Video' : '🎥 16:9 Landscape Standard';
+                        if (isHardsub) {
+                            vBadge = isReels ? '📱 9:16 Reels Hardsub Video' : '🛡️ 16:9 Landscape Hardsub Video';
+                        } else if (isReels) {
+                            vBadge = '📱 9:16 Facebook Reels Canvas';
+                        }
                         const vStyle = isReels
                             ? 'max-height:500px; width:auto; max-width:280px; margin:0 auto; display:block; border-radius:12px; box-shadow:0 8px 25px rgba(0,0,0,0.5);'
                             : 'width:100%; max-height:400px; border-radius:8px;';
+                        const descLabel = isReels
+                            ? '📱 Safe Zone + Top Hook Title'
+                            : (isHardsub ? '🛡️ Hardsub Movie Video' : '🔥 16:9 Anti-Copyright Video');
+                        const dlLabel = isReels ? 'Reels MP4' : (isHardsub ? 'Hardsub MP4' : 'Recap MP4');
                         bodyHtml += `<div class="video-wrap" style="${isReels ? 'background:rgba(255,255,255,0.02); padding:0.8rem; border-radius:12px; border:1px solid rgba(255,255,255,0.08);' : ''}">
                             <div class="video-title" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
                                 <span style="font-weight:700; color:${isReels ? '#38bdf8' : '#e4e4e7'};">${vBadge}</span>
@@ -3529,10 +3601,10 @@
                             </div>
                             <video controls preload="metadata" style="${vStyle}" src="${url}"></video>
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.6rem; flex-wrap:wrap; gap:0.5rem;">
-                                <span style="font-size:0.78rem; color:var(--muted);">${isReels ? '📱 Safe Zone + Top Hook Title' : '🔥 16:9 Anti-Copyright Video'}</span>
+                                <span style="font-size:0.78rem; color:var(--muted);">${descLabel}</span>
                                 <div style="display:inline-flex; gap:0.4rem; align-items:center;">
                                     <button type="button" class="btn-nav" style="padding:0.25rem 0.6rem; font-size:0.75rem; border-radius:6px; cursor:pointer;" onclick="openVideoPlayerModal('${url}', '${safeMovie} - ${fname}')">📺 Cinema Pop-out</button>
-                                    <a class="download-btn" href="${url}" target="_blank" download>⬇️ Download ${isReels ? 'Reels MP4' : 'Recap MP4'}</a>
+                                    <a class="download-btn" href="${url}" target="_blank" download>⬇️ Download ${dlLabel}</a>
                                 </div>
                             </div>
                         </div>`;
@@ -4190,6 +4262,8 @@
 
     // ── Subtitle & QC Report Modal ──
     let _subModalData = null;
+    let _currentModalTab = 'srt';
+
     async function openSubtitlePreview(movie) {
         const modal = document.getElementById('subtitle-preview-modal');
         if (!modal) return;
@@ -4213,6 +4287,7 @@
     }
 
     function switchModalTab(tab) {
+        _currentModalTab = tab;
         ['srt', 'txt', 'qc', 'table'].forEach(t => {
             const btn = document.getElementById(`tab-modal-${t}`);
             if (btn) btn.classList.toggle('active', t === tab);
@@ -4240,6 +4315,34 @@
             body.innerHTML = html;
         }
     }
+
+    async function copySubModalContent() {
+        if (!_subModalData) {
+            showToast('No content available to copy.', 'warn');
+            return;
+        }
+        let textToCopy = '';
+        if (_currentModalTab === 'srt') {
+            textToCopy = _subModalData.srt || '';
+        } else if (_currentModalTab === 'txt') {
+            textToCopy = _subModalData.txt || '';
+        } else if (_currentModalTab === 'qc') {
+            textToCopy = _subModalData.qc || '';
+        } else if (_currentModalTab === 'table') {
+            const recs = _subModalData.records || [];
+            textToCopy = recs.map((r, i) => `[${i+1}] ${(r.start_time||0).toFixed(1)}s - ${(r.end_time||0).toFixed(1)}s\nOriginal: ${r.original_text||''}\nBurmese: ${r.translated_text||''}`).join('\n\n');
+        }
+        if (!textToCopy.trim()) {
+            showToast('No content found in this tab to copy.', 'warn');
+            return;
+        }
+        try {
+            await navigator.clipboard.writeText(textToCopy);
+            showToast('📋 Subtitle & content copied to clipboard!', 'success');
+        } catch (err) {
+            showToast('Failed to copy to clipboard. Please copy manually.', 'warn');
+        }
+    }
 </script>
 
 <!-- ══ SUBTITLE & QC REPORT PREVIEW MODAL ══ -->
@@ -4253,7 +4356,12 @@
                     <span id="sub-modal-meta" style="font-size:0.75rem; color:var(--muted);">Burmese Subtitle & Quality Check Audit</span>
                 </div>
             </div>
-            <button class="btn-nav" onclick="closeSubtitlePreview()" style="background:rgba(0,0,0,0.06); border:none; font-size:1.2rem; cursor:pointer; border-radius:8px; padding:6px 12px;">✕</button>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <button type="button" class="btn-nav" onclick="copySubModalContent()" style="background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); color:#818cf8; font-size:0.8rem; font-weight:700; cursor:pointer; border-radius:8px; padding:6px 14px; display:inline-flex; align-items:center; gap:6px;" title="Copy current tab content to clipboard">
+                    📋 Copy Content
+                </button>
+                <button type="button" class="btn-nav" onclick="closeSubtitlePreview()" style="background:rgba(0,0,0,0.06); border:none; font-size:1.2rem; cursor:pointer; border-radius:8px; padding:6px 12px;">✕</button>
+            </div>
         </div>
         <div style="display:flex; gap:8px; padding:10px 24px; background:rgba(0,0,0,0.02); border-bottom:1px solid rgba(0,0,0,0.06); flex-wrap:wrap;">
             <button id="tab-modal-srt" class="tab-btn active" onclick="switchModalTab('srt')">💬 Burmese Subtitles (.SRT)</button>
