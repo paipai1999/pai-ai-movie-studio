@@ -961,9 +961,11 @@ class VideoMergerAgent:
             fps = float(cap.get(cv2.CAP_PROP_FPS) or 24.0)
             if fps <= 0 or fps > 120:
                 fps = 24.0
+            frame_cnt = float(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0.0)
+            vid_duration = (frame_cnt / fps) if fps > 0 and frame_cnt > 0 else 600.0
             cap.release()
         except Exception:
-            w, h, fps = 1920, 1080, 24.0
+            w, h, fps, vid_duration = 1920, 1080, 24.0, 600.0
 
         tmp_dir = os.path.dirname(os.path.abspath(video_path))
         base_name, _ = os.path.splitext(os.path.basename(video_path))
@@ -983,7 +985,7 @@ class VideoMergerAgent:
             ]
             res1 = subprocess.run(intro_cmd, capture_output=True, timeout=60)
             if res1.returncode != 0 or not os.path.exists(intro_ts):
-                err = res1.stderr[-300:] if res1.stderr else ""
+                err = (res1.stderr.decode("utf-8", errors="replace") if isinstance(res1.stderr, bytes) else str(res1.stderr or ""))[-300:]
                 print(f"[WARN] Failed to generate FFmpeg thumbnail intro: {err}")
                 return False
 
@@ -1003,11 +1005,15 @@ class VideoMergerAgent:
                 "-movflags", "+faststart",
                 concat_out
             ]
-            res2 = subprocess.run(concat_cmd, capture_output=True, timeout=600)
+            concat_timeout = max(1800, int(vid_duration * 3.0))
+            res2 = subprocess.run(concat_cmd, capture_output=True, timeout=concat_timeout)
             if res2.returncode == 0 and os.path.exists(concat_out) and os.path.getsize(concat_out) > 1000:
                 shutil.move(concat_out, video_path)
                 print(f"🎉 [OK] VideoMerger: Prepended {thumb_duration:.1f}s thumbnail intro with Pure FFmpeg!")
                 return True
+            else:
+                err2 = (res2.stderr.decode("utf-8", errors="replace") if isinstance(res2.stderr, bytes) else str(res2.stderr or ""))[-400:]
+                print(f"[WARN] VideoMerger: FFmpeg thumbnail intro concat failed (code={res2.returncode}): {err2}")
         except Exception as te:
             print(f"[WARN] VideoMerger: FFmpeg thumbnail intro prepend failed: {te}")
         finally:
@@ -1032,9 +1038,11 @@ class VideoMergerAgent:
             fps = float(cap.get(cv2.CAP_PROP_FPS) or 24.0)
             if fps <= 0 or fps > 120:
                 fps = 24.0
+            frame_cnt = float(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0.0)
+            vid_duration = (frame_cnt / fps) if fps > 0 and frame_cnt > 0 else 600.0
             cap.release()
         except Exception:
-            w, h, fps = 1920, 1080, 24.0
+            w, h, fps, vid_duration = 1920, 1080, 24.0, 600.0
 
         tmp_dir = os.path.dirname(os.path.abspath(video_path))
         base_name, _ = os.path.splitext(os.path.basename(video_path))
@@ -1103,7 +1111,7 @@ class VideoMergerAgent:
             ]
             res1 = subprocess.run(outro_cmd, capture_output=True, timeout=60)
             if res1.returncode != 0 or not os.path.exists(outro_ts):
-                err = res1.stderr[-300:] if res1.stderr else ""
+                err = (res1.stderr.decode("utf-8", errors="replace") if isinstance(res1.stderr, bytes) else str(res1.stderr or ""))[-300:]
                 print(f"[WARN] Failed to generate FFmpeg outro card: {err}")
                 return False
 
@@ -1123,11 +1131,15 @@ class VideoMergerAgent:
                 "-movflags", "+faststart",
                 concat_out
             ]
-            res2 = subprocess.run(concat_cmd, capture_output=True, timeout=600)
+            concat_timeout = max(1800, int(vid_duration * 3.0))
+            res2 = subprocess.run(concat_cmd, capture_output=True, timeout=concat_timeout)
             if res2.returncode == 0 and os.path.exists(concat_out) and os.path.getsize(concat_out) > 1000:
                 shutil.move(concat_out, video_path)
                 print(f"🎉 [OK] VideoMerger: Appended {outro_duration:.1f}s 'Pai AI Movie Studio' Outro Card!")
                 return True
+            else:
+                err2 = (res2.stderr.decode("utf-8", errors="replace") if isinstance(res2.stderr, bytes) else str(res2.stderr or ""))[-400:]
+                print(f"[WARN] VideoMerger: FFmpeg outro card concat failed (code={res2.returncode}): {err2}")
         except Exception as te:
             print(f"[WARN] VideoMerger: FFmpeg outro card append failed: {te}")
         finally:
@@ -2575,7 +2587,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         ]
 
         print(f"[*] ReelsExporter: Rendering 9:16 Canvas Reels ({w_target}x{h_target}) using {enc_info['label']} [{codec}]...")
-        timeout_sec = max(600, int((duration_sec or 600.0) * 1.5))
+        timeout_sec = max(3600, int((duration_sec or 600.0) * 4.0))
         try:
             res = subprocess.run(cmd, cwd=temp_dir, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout_sec)
             if os.environ.get("CURRENT_JOB_CANCELLED") == "1":

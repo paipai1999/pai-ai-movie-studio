@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 import json
 import uuid
 import time
@@ -8,7 +9,12 @@ import io
 import shutil
 import posixpath
 import asyncio
+import traceback
 import contextvars
+import zipfile
+import urllib.request
+import urllib.error
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
 from typing import Optional, List
 
@@ -21,8 +27,15 @@ from sse_starlette.sse import EventSourceResponse
 from agents.downloader_agent import DownloaderAgent
 from agents.master import MasterAgent
 from agents.video_merger_agent import detect_hardware_encoder
-from brain.sqlite_store import delete_movie_state, list_movie_states
+from brain.sqlite_store import (
+    delete_movie_state,
+    list_movie_states,
+    clean_stale_running_jobs,
+    create_job,
+    update_job,
+)
 from brain import config as cfg
+from brain.config import SUBTITLE_PRESETS
 from main import check_dependencies
 
 # Setup FFmpeg path at startup
@@ -34,7 +47,6 @@ except Exception as e:
     print(f"[WARN] check_dependencies failed: {e}")
 
 try:
-    from brain.sqlite_store import clean_stale_running_jobs, create_job, update_job
     stale_count = clean_stale_running_jobs()
     if stale_count > 0:
         print(f"[*] WebUI: Reset {stale_count} stale running job(s) from previous session.")
@@ -142,7 +154,6 @@ def _queue_dispatcher():
                     jobs[jid]["phase"] = "Starting..."
                     should_start = True
                     try:
-                        from brain.sqlite_store import update_job
                         update_job(jid, status="running", phase="Starting...")
                     except Exception:
                         pass
@@ -444,7 +455,6 @@ def pipeline_worker(
             except Exception:
                 pass
         else:
-            import traceback
             traceback.print_exc()
             err_msg = str(e) or type(e).__name__
             with jobs_lock:
@@ -452,12 +462,181 @@ def pipeline_worker(
                 jobs[job_id]['error'] = err_msg
                 jobs[job_id]['phase'] = f"Error: {err_msg[:60]}"
             try:
-                from brain.sqlite_store import update_job
                 update_job(job_id, status='error', phase=f"Error: {err_msg[:60]}")
             except Exception:
                 pass
     finally:
         # Free log buffer immediately on job end
+        if hasattr(thread_stdout, 'buffers'):
+            thread_stdout.buffers.pop(job_id, None)
+
+def subtitle_worker(
+    job_id,
+    input_source,
+    project_name=None,
+    source_language="auto",
+    force_whisper=False,
+):
+    current_job_id.set(job_id)
+    cancel_events[job_id] = threading.Event()
+    os.environ["CURRENT_JOB_CANCELLED"] = "0"
+    buffer = io.StringIO()
+    thread_stdout.buffers[job_id] = buffer
+    with jobs_lock:
+        jobs[job_id]['buffer'] = buffer
+
+    try:
+        create_job(job_id, str(input_source), phase="Starting Subtitle Engine...")
+    except Exception:
+        pass
+
+    try:
+        from subtitle_engine import SubtitleEngine
+        engine = SubtitleEngine(output_base_dir="outputs")
+        with jobs_lock:
+            jobs[job_id]['phase'] = 'Processing Subtitles...'
+        print(f"[*] Subtitle Engine: Starting job {job_id} for {input_source}...")
+        engine.run(
+            input_source=input_source,
+            project_name=project_name,
+            source_language=source_language,
+            force_whisper=force_whisper
+        )
+
+        job_cancel_ev = cancel_events.get(job_id)
+        if (job_cancel_ev and job_cancel_ev.is_set()) or os.environ.get("CURRENT_JOB_CANCELLED") == "1":
+            with jobs_lock:
+                jobs[job_id]['status'] = 'cancelled'
+                jobs[job_id]['phase'] = 'Stopped by user'
+            try:
+                update_job(job_id, status='cancelled', phase='Stopped by user')
+            except Exception:
+                pass
+        else:
+            with jobs_lock:
+                jobs[job_id]['status'] = 'done'
+                jobs[job_id]['phase'] = 'Done'
+            try:
+                update_job(job_id, status='done', phase='Done')
+            except Exception:
+                pass
+    except Exception as e:
+        job_cancel_ev = cancel_events.get(job_id)
+        is_cancel = isinstance(e, (InterruptedError, KeyboardInterrupt)) or (job_cancel_ev and job_cancel_ev.is_set()) or (os.environ.get("CURRENT_JOB_CANCELLED") == "1")
+        if is_cancel:
+            print(f"\n🛑 [STOP] Job {job_id} was force-stopped by user.")
+            with jobs_lock:
+                jobs[job_id]['status'] = 'cancelled'
+                jobs[job_id]['phase'] = 'Stopped by user'
+            try:
+                update_job(job_id, status='cancelled', phase='Stopped by user')
+            except Exception:
+                pass
+        else:
+            traceback.print_exc()
+            err_msg = str(e) or type(e).__name__
+            with jobs_lock:
+                jobs[job_id]['status'] = 'error'
+                jobs[job_id]['error'] = err_msg
+                jobs[job_id]['phase'] = f"Error: {err_msg[:60]}"
+            try:
+                update_job(job_id, status='error', phase=f"Error: {err_msg[:60]}")
+            except Exception:
+                pass
+    finally:
+        if hasattr(thread_stdout, 'buffers'):
+            thread_stdout.buffers.pop(job_id, None)
+
+def hardsub_worker(
+    job_id,
+    input_source,
+    project_name=None,
+    source_language="auto",
+    force_whisper=False,
+    video_format="both",
+    resolution="1080p",
+    subtitle_style="box_black",
+    blur_mode="auto",
+    mirror=False,
+    color_grading=True,
+    blur_height=None,
+    audio_anti_copyright=False,
+):
+    current_job_id.set(job_id)
+    cancel_events[job_id] = threading.Event()
+    os.environ["CURRENT_JOB_CANCELLED"] = "0"
+    buffer = io.StringIO()
+    thread_stdout.buffers[job_id] = buffer
+    with jobs_lock:
+        jobs[job_id]['buffer'] = buffer
+
+    try:
+        create_job(job_id, str(input_source), phase="Starting Hardsub Studio...")
+    except Exception:
+        pass
+
+    try:
+        from hardsub_engine import HardsubEngine
+        engine = HardsubEngine(output_base_dir="outputs", cancel_event=cancel_events[job_id])
+        with jobs_lock:
+            jobs[job_id]['phase'] = 'Processing Hardsub Video...'
+        print(f"[*] Hardsub Studio: Starting job {job_id} for {input_source} (Format: {video_format}, Res: {resolution})...")
+        engine.run(
+            input_source=input_source,
+            project_name=project_name,
+            source_language=source_language,
+            force_whisper=force_whisper,
+            video_format=video_format,
+            resolution=resolution,
+            subtitle_style=subtitle_style,
+            blur_mode=blur_mode,
+            blur_height=blur_height,
+            mirror=mirror,
+            color_grading=color_grading,
+            audio_anti_copyright=audio_anti_copyright,
+        )
+
+        job_cancel_ev = cancel_events.get(job_id)
+        if (job_cancel_ev and job_cancel_ev.is_set()) or os.environ.get("CURRENT_JOB_CANCELLED") == "1":
+            with jobs_lock:
+                jobs[job_id]['status'] = 'cancelled'
+                jobs[job_id]['phase'] = 'Stopped by user'
+            try:
+                update_job(job_id, status='cancelled', phase='Stopped by user')
+            except Exception:
+                pass
+        else:
+            with jobs_lock:
+                jobs[job_id]['status'] = 'done'
+                jobs[job_id]['phase'] = 'Done'
+            try:
+                update_job(job_id, status='done', phase='Done')
+            except Exception:
+                pass
+    except Exception as e:
+        job_cancel_ev = cancel_events.get(job_id)
+        is_cancel = isinstance(e, (InterruptedError, KeyboardInterrupt)) or (job_cancel_ev and job_cancel_ev.is_set()) or (os.environ.get("CURRENT_JOB_CANCELLED") == "1")
+        if is_cancel:
+            print(f"\n🛑 [STOP] Hardsub job {job_id} was force-stopped by user.")
+            with jobs_lock:
+                jobs[job_id]['status'] = 'cancelled'
+                jobs[job_id]['phase'] = 'Stopped by user'
+            try:
+                update_job(job_id, status='cancelled', phase='Stopped by user')
+            except Exception:
+                pass
+        else:
+            traceback.print_exc()
+            err_msg = str(e) or type(e).__name__
+            with jobs_lock:
+                jobs[job_id]['status'] = 'error'
+                jobs[job_id]['error'] = err_msg
+                jobs[job_id]['phase'] = f"Error: {err_msg[:60]}"
+            try:
+                update_job(job_id, status='error', phase=f"Error: {err_msg[:60]}")
+            except Exception:
+                pass
+    finally:
         if hasattr(thread_stdout, 'buffers'):
             thread_stdout.buffers.pop(job_id, None)
 
@@ -482,6 +661,13 @@ def batch_worker(
     resume=True,
     tts_voice=None,
     script_engine="recap",
+    engine_mode="recap",
+    blur_mode="auto",
+    blur_height=None,
+    mirror=False,
+    color_grading=True,
+    audio_anti_copyright=False,
+    force_whisper=False,
 ):
     from brain.planner import BatchProcessor
     current_job_id.set(job_id)
@@ -515,63 +701,109 @@ def batch_worker(
         pass
     
     try:
-        urls = [i for i in inputs_list if DownloaderAgent.is_url(i)]
-        local_paths = [_resolve_input_source(i) for i in inputs_list if not DownloaderAgent.is_url(i)]
-        # Multi-Voice Mapping
-        tts_voice_override = tts_voice
-        clean_lang = language
-        if tts_voice_override:
-            if tts_voice_override in ["thiha", "male", "burmese_thiha"]:
+        total_items = len(inputs_list)
+        if engine_mode == "hardsub":
+            from hardsub_engine import HardsubEngine
+            print(f"[*] Batch Hardsub Studio: Starting batch of {total_items} items...")
+            hardsub_eng = HardsubEngine(output_base_dir="outputs", cancel_event=cancel_events.get(job_id))
+            for idx, item in enumerate(inputs_list, 1):
+                if (cancel_events.get(job_id) and cancel_events[job_id].is_set()) or os.environ.get("CURRENT_JOB_CANCELLED") == "1":
+                    break
+                with jobs_lock:
+                    jobs[job_id]['phase'] = f"Hardsub Item {idx}/{total_items}: {os.path.basename(item)[:30]}..."
+                print(f"\n{'='*65}\n[BATCH HARDSUB] Item {idx}/{total_items}: {item}\n{'='*65}")
+                try:
+                    hardsub_eng.run(
+                        input_source=item,
+                        source_language=source_language or "auto",
+                        force_whisper=force_whisper,
+                        video_format=video_format or "both",
+                        resolution=resolution or "1080p",
+                        subtitle_style=subtitle_style or "box_black",
+                        blur_mode=blur_mode or "auto",
+                        blur_height=blur_height,
+                        mirror=mirror,
+                        color_grading=color_grading,
+                        audio_anti_copyright=audio_anti_copyright,
+                    )
+                except Exception as item_err:
+                    print(f"[ERROR] Batch item {idx} failed: {item_err}")
+        elif engine_mode == "subtitle":
+            from subtitle_engine import SubtitleEngine
+            print(f"[*] Batch Subtitle Engine: Starting batch of {total_items} items...")
+            sub_eng = SubtitleEngine(output_base_dir="outputs")
+            for idx, item in enumerate(inputs_list, 1):
+                if (cancel_events.get(job_id) and cancel_events[job_id].is_set()) or os.environ.get("CURRENT_JOB_CANCELLED") == "1":
+                    break
+                with jobs_lock:
+                    jobs[job_id]['phase'] = f"Subtitle Item {idx}/{total_items}: {os.path.basename(item)[:30]}..."
+                print(f"\n{'='*65}\n[BATCH SUBTITLE] Item {idx}/{total_items}: {item}\n{'='*65}")
+                try:
+                    sub_eng.run(
+                        input_source=item,
+                        source_language=source_language or "auto",
+                        force_whisper=force_whisper,
+                    )
+                except Exception as item_err:
+                    print(f"[ERROR] Batch item {idx} failed: {item_err}")
+        else:
+            urls = [i for i in inputs_list if DownloaderAgent.is_url(i)]
+            local_paths = [_resolve_input_source(i) for i in inputs_list if not DownloaderAgent.is_url(i)]
+            # Multi-Voice Mapping
+            tts_voice_override = tts_voice
+            clean_lang = language
+            if tts_voice_override:
+                if tts_voice_override in ["thiha", "male", "burmese_thiha"]:
+                    tts_voice_override = "my-MM-ThihaNeural"
+                elif tts_voice_override in ["nilar", "female", "burmese_nilar"]:
+                    tts_voice_override = "my-MM-NilarNeural"
+                elif tts_voice_override in ["guy", "english_guy"]:
+                    tts_voice_override = "en-US-GuyNeural"
+                elif tts_voice_override in ["jenny", "english_jenny"]:
+                    tts_voice_override = "en-US-JennyNeural"
+            elif language in ["burmese_thiha", "thiha"]:
+                clean_lang = "burmese"
                 tts_voice_override = "my-MM-ThihaNeural"
-            elif tts_voice_override in ["nilar", "female", "burmese_nilar"]:
+            elif language in ["burmese_nilar", "nilar"]:
+                clean_lang = "burmese"
                 tts_voice_override = "my-MM-NilarNeural"
-            elif tts_voice_override in ["guy", "english_guy"]:
+            elif language in ["burmese", "mm", "myanmar"]:
+                clean_lang = "burmese"
+                tts_voice_override = "my-MM-ThihaNeural"
+            elif language in ["english_guy", "guy"]:
+                clean_lang = "english"
                 tts_voice_override = "en-US-GuyNeural"
-            elif tts_voice_override in ["jenny", "english_jenny"]:
+            elif language in ["english_jenny", "jenny"]:
+                clean_lang = "english"
                 tts_voice_override = "en-US-JennyNeural"
-        elif language in ["burmese_thiha", "thiha"]:
-            clean_lang = "burmese"
-            tts_voice_override = "my-MM-ThihaNeural"
-        elif language in ["burmese_nilar", "nilar"]:
-            clean_lang = "burmese"
-            tts_voice_override = "my-MM-NilarNeural"
-        elif language in ["burmese", "mm", "myanmar"]:
-            clean_lang = "burmese"
-            tts_voice_override = "my-MM-ThihaNeural"
-        elif language in ["english_guy", "guy"]:
-            clean_lang = "english"
-            tts_voice_override = "en-US-GuyNeural"
-        elif language in ["english_jenny", "jenny"]:
-            clean_lang = "english"
-            tts_voice_override = "en-US-JennyNeural"
-        elif language in ["english", "en"]:
-            clean_lang = "english"
-            tts_voice_override = "en-US-GuyNeural"
+            elif language in ["english", "en"]:
+                clean_lang = "english"
+                tts_voice_override = "en-US-GuyNeural"
 
-        processor = BatchProcessor(
-            movies_folder="movies",
-            skip_completed=True,
-            language=clean_lang,
-            subtitle_mode=subtitle_mode,
-            subtitle_style=subtitle_style,
-            resolution=resolution,
-            tts_engine=tts_engine,
-            tts_voice=tts_voice_override,
-            custom_thumb_title=custom_thumb_title,
-            watermark_enabled=watermark_enabled,
-            watermark_text=watermark_text,
-            watermark_opacity=watermark_opacity,
-            video_format=video_format,
-            thumbnail_intro=thumbnail_intro,
-            source_language=source_language,
-            script_engine=script_engine,
-            resume=resume,
-            cancel_event=cancel_events.get(job_id),
-            skip_demucs=skip_demucs,
-            detect_scenes=detect_scenes,
-        )
-        print(f"[*] Batch Mode: Starting batch run for {len(inputs_list)} item(s)...")
-        processor.process_all(url_list=urls, local_paths=local_paths)
+            processor = BatchProcessor(
+                movies_folder="movies",
+                skip_completed=True,
+                language=clean_lang,
+                subtitle_mode=subtitle_mode,
+                subtitle_style=subtitle_style,
+                resolution=resolution,
+                tts_engine=tts_engine,
+                tts_voice=tts_voice_override,
+                custom_thumb_title=custom_thumb_title,
+                watermark_enabled=watermark_enabled,
+                watermark_text=watermark_text,
+                watermark_opacity=watermark_opacity,
+                video_format=video_format,
+                thumbnail_intro=thumbnail_intro,
+                source_language=source_language,
+                script_engine=script_engine,
+                resume=resume,
+                cancel_event=cancel_events.get(job_id),
+                skip_demucs=skip_demucs,
+                detect_scenes=detect_scenes,
+            )
+            print(f"[*] Batch Mode: Starting batch run for {len(inputs_list)} item(s)...")
+            processor.process_all(url_list=urls, local_paths=local_paths)
         
         job_cancel_ev = cancel_events.get(job_id)
         if (job_cancel_ev and job_cancel_ev.is_set()) or os.environ.get("CURRENT_JOB_CANCELLED") == "1":
@@ -602,7 +834,6 @@ def batch_worker(
             except Exception:
                 pass
         else:
-            import traceback
             traceback.print_exc()
             err_msg = str(e) or type(e).__name__
             with jobs_lock:
@@ -610,7 +841,6 @@ def batch_worker(
                 jobs[job_id]['error'] = err_msg
                 jobs[job_id]['phase'] = f"Error: {err_msg[:60]}"
             try:
-                from brain.sqlite_store import update_job
                 update_job(job_id, status='error', phase=f"Error: {err_msg[:60]}")
             except Exception:
                 pass
@@ -622,6 +852,9 @@ def batch_worker(
 # ── Pydantic Request Models ──
 class StartRequest(BaseModel):
     input: str
+    engine_mode: Optional[str] = "recap"
+    project_name: Optional[str] = None
+    force_whisper: Optional[bool] = False
     language: Optional[str] = "burmese"
     subtitle_mode: Optional[str] = "burn"
     resolution: Optional[str] = "1080p"
@@ -643,9 +876,16 @@ class StartRequest(BaseModel):
     trim_end: Optional[float] = None
     no_smart_trim: Optional[bool] = False
     outro_card: Optional[bool] = False
+    blur_mode: Optional[str] = "auto"
+    blur_height: Optional[float] = None
+    mirror: Optional[bool] = False
+    color_grading: Optional[bool] = True
+    audio_anti_copyright: Optional[bool] = False
 
 class BatchStartRequest(BaseModel):
     inputs: List[str]
+    engine_mode: Optional[str] = "recap"
+    force_whisper: Optional[bool] = False
     language: Optional[str] = "burmese"
     subtitle_mode: Optional[str] = "burn"
     resolution: Optional[str] = "1080p"
@@ -664,6 +904,11 @@ class BatchStartRequest(BaseModel):
     detect_scenes: Optional[bool] = False
     script_engine: Optional[str] = "recap"
     resume: Optional[bool] = True
+    blur_mode: Optional[str] = "auto"
+    blur_height: Optional[float] = None
+    mirror: Optional[bool] = False
+    color_grading: Optional[bool] = True
+    audio_anti_copyright: Optional[bool] = False
 
 class SubtitleConfigRequest(BaseModel):
     preset: str = "box_black"
@@ -1042,15 +1287,57 @@ async def start_pipeline(req: StartRequest):
             "tts_engine": str(tts_engine or "edge_tts")
         }
         try:
-            from brain.sqlite_store import create_job
             create_job(job_id, str(input_source), phase=initial_phase, status=initial_status)
         except Exception:
             pass
 
-    job_entry = {
-        "job_id": job_id,
-        "target": pipeline_worker,
-        "args": (
+    if req.engine_mode == "hardsub":
+        job_entry = {
+            "job_id": job_id,
+            "target": hardsub_worker,
+            "args": (
+                job_id,
+                input_source,
+                req.project_name,
+                req.source_language or "auto",
+                req.force_whisper or False,
+                video_format,
+                resolution,
+                subtitle_style,
+                req.blur_mode or "auto",
+                req.mirror or False,
+                req.color_grading if req.color_grading is not None else True,
+                req.blur_height,
+                req.audio_anti_copyright or False,
+            ),
+            "name": str(req.project_name or input_source),
+            "source": str(input_source),
+            "language": str(req.source_language or "auto"),
+            "engine_mode": "hardsub",
+            "created_at": time.time()
+        }
+    elif req.engine_mode == "subtitle":
+        job_entry = {
+            "job_id": job_id,
+            "target": subtitle_worker,
+            "args": (
+                job_id,
+                input_source,
+                req.project_name,
+                req.source_language or "auto",
+                req.force_whisper or False,
+            ),
+            "name": str(req.project_name or input_source),
+            "source": str(input_source),
+            "language": str(req.source_language or "auto"),
+            "engine_mode": "subtitle",
+            "created_at": time.time()
+        }
+    else:
+        job_entry = {
+            "job_id": job_id,
+            "target": pipeline_worker,
+            "args": (
             job_id,
             input_source,
             language,
@@ -1127,7 +1414,6 @@ async def start_batch_pipeline(req: BatchStartRequest):
             "tts_engine": str(tts_engine or "edge_tts")
         }
         try:
-            from brain.sqlite_store import create_job
             create_job(job_id, f"Batch ({len(inputs)} items)", phase=initial_phase, status=initial_status)
         except Exception:
             pass
@@ -1156,8 +1442,15 @@ async def start_batch_pipeline(req: BatchStartRequest):
             req.resume if req.resume is not None else True,
             req.tts_voice,
             req.script_engine or "recap",
+            req.engine_mode or "recap",
+            req.blur_mode or "auto",
+            req.blur_height,
+            req.mirror or False,
+            req.color_grading if req.color_grading is not None else True,
+            req.audio_anti_copyright or False,
+            req.force_whisper or False,
         ),
-        "name": f"Batch ({len(inputs)} items)",
+        "name": f"Batch [{req.engine_mode.upper() if req.engine_mode else 'RECAP'}] ({len(inputs)} items)",
         "source": f"Batch ({len(inputs)} items)",
         "language": str(language),
         "tts_engine": str(tts_engine or "edge_tts"),
@@ -1215,7 +1508,6 @@ def delete_from_queue(job_id: str):
             jobs[job_id]["status"] = "cancelled"
             jobs[job_id]["phase"] = "Cancelled from queue"
             try:
-                from brain.sqlite_store import update_job
                 update_job(job_id, status="cancelled", phase="Cancelled from queue")
             except Exception:
                 pass
@@ -1244,7 +1536,6 @@ async def stop_pipeline(job_id: Optional[str] = None):
                 jobs[jid]["phase"] = "Stopped by user"
                 stopped_count += 1
                 try:
-                    from brain.sqlite_store import update_job
                     update_job(jid, status="cancelled", phase="Stopped by user")
                 except Exception:
                     pass
@@ -1303,7 +1594,6 @@ async def save_branding_config(req: BrandingConfigRequest):
 @app.get("/api/config/subtitles")
 async def get_subtitle_config():
     """Returns available subtitle style presets and current active setting."""
-    from brain.config import SUBTITLE_PRESETS
     c = cfg.load_config()
     sub_cfg = c.get("subtitle_overlay", {})
     return {
@@ -1315,7 +1605,6 @@ async def get_subtitle_config():
 @app.post("/api/config/subtitles")
 async def save_subtitle_config(req: SubtitleConfigRequest):
     """Saves chosen subtitle style preset into config.json."""
-    from brain.config import SUBTITLE_PRESETS
     if req.preset not in SUBTITLE_PRESETS:
         raise HTTPException(status_code=400, detail="Unknown preset ID")
     c = cfg.load_config()
@@ -1333,7 +1622,6 @@ async def stream_job_logs(job_id: str, request: Request):
             raise HTTPException(status_code=404, detail="Job not found")
 
     async def event_generator():
-        import re
         loop = asyncio.get_running_loop()
         q = asyncio.Queue()
         sub_item = (q, loop)
@@ -1463,7 +1751,6 @@ async def status_endpoint(job_id: str):
         lines = [line for line in content.split('\n') if line.strip()]
         log_lines = lines[-35:]
 
-        import re
         for line in reversed(lines):
             if '--- [Phase' in line or '--- [DONE]' in line:
                 current_phase = line.strip().strip('-').strip()
@@ -1498,6 +1785,8 @@ async def status_endpoint(job_id: str):
     # Compute progress integer (0-100) from phase name for frontend progress bar
 
     progress_map = {
+        "Step 1": 15, "Step 2": 35, "Step 3": 50, "Step 4": 65,
+        "Step 5": 85, "Step 6": 95, "Step 7": 98,
         "Phase 1": 5, "Phase 2": 20, "Phase 3": 25, "Phase 4": 40,
         "Phase 5": 60, "Phase 6": 85, "Phase 6b": 95, "Phase 7": 98,
         "Done": 100, "Downloading": 3, "Starting": 1,
@@ -1546,7 +1835,7 @@ def list_outputs():
         if rel_dir == ".":
             rel_dir = ""
 
-        entry = {"files": [], "progress": 100, "phase": "Done", "total_duration": "", "phase_durations": {}}
+        entry = {"files": [], "progress": 100, "phase": "Done", "total_duration": "", "phase_durations": {}, "engine_type": "recap"}
         for f in sorted(files):
             if f == "state.json":
                 try:
@@ -1557,6 +1846,8 @@ def list_outputs():
                         entry["total_duration"] = state_data.get("total_duration_formatted", "")
                         entry["total_duration_sec"] = state_data.get("total_duration_sec", 0.0)
                         entry["phase_durations"] = state_data.get("phase_durations", {})
+                        entry["engine_type"] = state_data.get("engine_type", "subtitle" if any("subtitle_burmese" in x for x in files) else "recap")
+                        entry["total_records"] = state_data.get("total_records")
                 except Exception:
                     pass
                 continue
@@ -1612,9 +1903,6 @@ def serve_output(path: str = Query("")):
 @app.get("/api/outputs/zip")
 def download_project_zip(movie: str = Query("")):
     """Packages all finished recap assets for a given movie into a single fast-downloadable .zip archive."""
-    import zipfile
-    import re
-
     if not movie:
         raise HTTPException(status_code=400, detail="Movie project name required")
 
@@ -1758,11 +2046,6 @@ async def handle_config(request: Request):
 
 @app.get("/api/keys/status")
 def get_key_status():
-    import brain.config as cfg
-    import urllib.request
-    import urllib.error
-    from concurrent.futures import ThreadPoolExecutor
-    
     try:
         config_data = cfg.load_config()
         gemini_cfg = config_data.get("gemini", {})
@@ -1948,7 +2231,6 @@ async def rename_movie(req: RenameRequest):
 @app.get("/api/keys")
 @app.get("/api/keys/list")
 def list_raw_keys():
-    import brain.config as cfg
     try:
         config_data = cfg.load_config()
         gemini_cfg = config_data.get("gemini", {})
@@ -1967,7 +2249,6 @@ def list_raw_keys():
 
 @app.post("/api/keys/save")
 def save_keys(req: SaveKeysRequest):
-    import brain.config as cfg
     try:
         config_data = cfg.load_config()
         existing_keys = config_data.get("gemini", {}).get("api_keys", [])
@@ -2032,3 +2313,49 @@ if __name__ == '__main__':
     host = args.host or os.getenv("HOST", default_host)
     port = args.port or int(os.getenv("PORT", 5000))
     uvicorn.run(app, host=host, port=port, log_level='info')
+
+
+@app.get("/api/subtitle/preview/{movie_name:path}")
+def preview_subtitle_project(movie_name: str):
+    safe_name = os.path.normpath(movie_name).strip(" /\\.")
+    outputs_dir = os.path.abspath("outputs")
+    proj_dir = os.path.normpath(os.path.join(outputs_dir, safe_name))
+    if os.path.commonpath([outputs_dir, proj_dir]) != outputs_dir or not os.path.exists(proj_dir):
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    srt_file = os.path.join(proj_dir, "05_subtitle_burmese.srt")
+    qc_file = os.path.join(proj_dir, "06_quality_check_report.txt")
+    txt_file = os.path.join(proj_dir, "04_transcript_burmese.txt")
+    json_file = os.path.join(proj_dir, "records_data.json")
+
+    srt_content = ""
+    if os.path.exists(srt_file):
+        with open(srt_file, "r", encoding="utf-8", errors="replace") as f:
+            srt_content = f.read()
+
+    qc_content = ""
+    if os.path.exists(qc_file):
+        with open(qc_file, "r", encoding="utf-8", errors="replace") as f:
+            qc_content = f.read()
+
+    txt_content = ""
+    if os.path.exists(txt_file):
+        with open(txt_file, "r", encoding="utf-8", errors="replace") as f:
+            txt_content = f.read()
+
+    records = []
+    if os.path.exists(json_file):
+        try:
+            with open(json_file, "r", encoding="utf-8", errors="replace") as f:
+                records = json.load(f)
+        except Exception:
+            pass
+
+    return {
+        "project": safe_name,
+        "srt_content": srt_content,
+        "qc_report": qc_content,
+        "transcript_burmese": txt_content,
+        "records": records[:100],
+        "total_records": len(records)
+    }

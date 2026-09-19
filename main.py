@@ -185,6 +185,29 @@ def main():
         help="TTS Voiceover Engine: 'edge_tts' (free cloud) or 'f5_tts' (zero-shot cloning)"
     )
     parser.add_argument(
+        "--engine-mode",
+        dest="engine_mode",
+        choices=["recap", "subtitle", "hardsub"],
+        default="recap",
+        help="Pipeline Engine: 'recap' (Movie Recap Video Studio), 'subtitle' (Subtitle Generator), or 'hardsub' (Original Audio & Burmese Hardsub Studio)"
+    )
+    parser.add_argument(
+        "--mirror",
+        action="store_true",
+        help="Mirror video horizontally for anti-copyright protection"
+    )
+    parser.add_argument(
+        "--blur-height",
+        type=float,
+        default=None,
+        help="Custom subtitle blur height ratio (e.g. 0.18, 0.25)"
+    )
+    parser.add_argument(
+        "--audio-anti-copyright",
+        action="store_true",
+        help="Subtly perturb audio tempo (atempo=1.008) in Engine 3 to evade Content ID audio fingerprinting"
+    )
+    parser.add_argument(
         "--no-voice",
         action="store_true",
         help="Skip Text-to-Speech voice generation step"
@@ -414,6 +437,31 @@ def main():
                 print(f"[ERROR] File not found: '{movie_path}'")
                 print("[TIP] If this is a URL, make sure it starts with http:// or https://")
                 sys.exit(1)
+
+        if args.engine_mode == "hardsub":
+            from hardsub_engine import HardsubEngine
+            engine = HardsubEngine()
+            blur_opt = "yes" if args.subtitle else "auto"
+            engine.run(
+                input_source=movie_path,
+                video_format=chosen_format or "both",
+                resolution=args.resolution or "1080p",
+                subtitle_style=args.subtitle_style or "box_black",
+                blur_mode=blur_opt,
+                blur_height=args.blur_height,
+                mirror=args.mirror,
+                audio_anti_copyright=args.audio_anti_copyright,
+                source_language=args.source_lang or "auto",
+            )
+            return
+        elif args.engine_mode == "subtitle":
+            from subtitle_engine import SubtitleEngine
+            engine = SubtitleEngine()
+            engine.run(
+                input_source=movie_path,
+                source_language=args.source_lang or "auto",
+            )
+            return
 
         try:
             sub_mode = "burn" if args.subtitle else (args.sub_mode or "burn")

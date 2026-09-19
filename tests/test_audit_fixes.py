@@ -99,6 +99,31 @@ class TestAuditFixes(unittest.TestCase):
                 dl.download_video("https://youtube.com/watch?v=dummy123")
             self.assertIn("Download seemed to succeed but file not found", str(ctx.exception))
 
+    def test_qa_agent_review_model_workhorse_defined(self):
+        """Verify QAAgent.review does not raise NameError for model_workhorse during language check."""
+        qa = QAAgent()
+        state = MovieState(movie_name="ModelWorkhorseTest")
+        state.generated_script = [{"scene_id": "1", "narration": "မင်္ဂလာပါ။"}]
+        cfg_mock = {
+            "gemini": {
+                "enabled": True,
+                "api_keys": ["fake-key"],
+                "models": {"workhorse": "gemini-3.5-flash-lite"}
+            },
+            "qa": {
+                "enabled": True,
+                "skip_video_qa": True,
+                "language_check": True,
+                "sync_check": False
+            }
+        }
+        with patch("brain.config.load_config", return_value=cfg_mock):
+            with patch.object(qa, "_run_language_check", return_value={"overall_language_score": 8, "blocks": []}):
+                with patch.object(qa, "_save_reports"):
+                    reviewed = qa.review(state, "dummy_orig.mp4", "dummy_recap.mp4")
+                    self.assertIsNotNone(reviewed.qa_results)
+                    self.assertEqual(reviewed.qa_results.get("language", {}).get("overall_language_score"), 8)
+
 
 if __name__ == "__main__":
     unittest.main()

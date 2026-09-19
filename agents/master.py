@@ -246,7 +246,7 @@ class MasterAgent:
                     self.state.reels_video_path = None
 
                 if title_changed:
-                    print(f"[*] MasterAgent: Custom thumbnail title changed. Invalidating Phase 4, 6, 7.")
+                    print("[*] MasterAgent: Custom thumbnail title changed. Invalidating Phase 4, 6, 7.")
                     invalidated_phases.update([PHASE_4_SCRIPT, PHASE_6_MERGE, PHASE_7_QA])
                     self.state.thumbnail_path = None
                 elif getattr(prev_state, "thumbnail_path", None) and os.path.exists(prev_state.thumbnail_path):
@@ -457,15 +457,22 @@ class MasterAgent:
         sys.stderr = pipe_logger
 
         try:
-            import torch
-            from agents.video_merger_agent import detect_hardware_encoder
-            enc = detect_hardware_encoder()
-            if torch.cuda.is_available():
-                gpu_name = torch.cuda.get_device_name(0)
-                vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-                hw_str = f"🚀 Dedicated GPU: {gpu_name} ({vram_gb:.1f} GB VRAM) [Encoder: {enc['label']}]"
-            else:
-                hw_str = f"💻 CPU Multi-Core [Encoder: {enc['label']}]"
+            hw_str = "💻 CPU Multi-Core"
+            try:
+                from agents.video_merger_agent import detect_hardware_encoder
+                enc = detect_hardware_encoder()
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        gpu_name = torch.cuda.get_device_name(0)
+                        vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                        hw_str = f"🚀 Dedicated GPU: {gpu_name} ({vram_gb:.1f} GB VRAM) [Encoder: {enc['label']}]"
+                    else:
+                        hw_str = f"💻 CPU Multi-Core [Encoder: {enc['label']}]"
+                except Exception:
+                    hw_str = f"💻 CPU Multi-Core [Encoder: {enc.get('label', 'Default')}]"
+            except Exception:
+                pass
 
             print(f"\n{'='*60}")
             print("[MOVIE RECAP AI] End-to-End Autonomous Pipeline")

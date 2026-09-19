@@ -227,40 +227,65 @@ Choose from 5 professionally designed subtitle styles with real-time live previe
 ---
 
 
+### 🎯 The Triple-Engine Architecture
+
+This platform provides three specialized production engines tailored for different video localization needs:
+
+| Feature / Capability | 🎬 Engine 1: Movie Recap Studio | 📝 Engine 2: Subtitle & Transcript Studio | 🎞️ Engine 3: Hardsub Studio |
+| :--- | :---: | :---: | :---: |
+| **Primary Script / Core** | [`main.py`](main.py) / `MasterAgent` | [`subtitle_engine.py`](subtitle_engine.py) | [`hardsub_engine.py`](hardsub_engine.py) |
+| **Windows Quick Launcher** | [`Run_Movie_Recap.bat`](Run_Movie_Recap.bat) | [`Run_Subtitle_Engine.bat`](Run_Subtitle_Engine.bat) | [`Run_Hardsub_Engine.bat`](Run_Hardsub_Engine.bat) |
+| **Primary Output Purpose** | Viral Movie Recaps with Full AI Dubbing | 1:1 Subtitles & Multi-Lingual Transcripts | Hardsubbed Videos with 100% Original Audio |
+| **Audio Treatment** | AI Multi-Voice Dubbing (Thiha / Nilar) | Original Audio (Muted or Preserved) | **100% Original Audio Preserved (Zero TTS)** |
+| **Anti-Copyright Shields** | Dynamic ducking, scene-trimming | Standard 1:1 matching | **1.02x Zoom/Crop, Color EQ, Mirror, Audio Shield** |
+| **Subtitle Blur Protection** | Bottom area blur detection | Optional transcript | **Vision AI Auto Subtitle Blur (12%–30% bottom)** |
+| **Translation Style** | Storyteller Persona (`...ခဲ့တာပေါ့ဗျာ`) | Spoken Burmese (စကားပြောဟန်) | **Faithful 1:1 Persona (Male/Female/Child particles)** |
+| **Deliverable Exports** | 16:9 Video, 9:16 Reels, Thumbnail, SEO | 6 Deliverables (`.mp4`, `.txt` x3, `.srt`, QC) | 16:9 MP4, 9:16 MP4, `.ass`, `.srt`, `.json`, QC Report |
+
+---
+
 ## 🗂️ Project Structure
 
 ```text
 ai-translate-agent/
+├── hardsub_engine.py          ← Engine 3: 100% Original Audio & Burmese Hardsub Studio
+├── subtitle_engine.py         ← Engine 2: YouTube to Burmese Subtitle & Transcript Studio
+├── main.py                    ← Engine 1 CLI & Unified Multi-Engine Dispatcher
+├── web_ui.py                  ← FastAPI Web Dashboard with 3-Engine Graphical Interface
+│
+├── Run_Movie_Recap.bat        ← Master Launcher (Menu with options for all 3 engines)
+├── Run_Hardsub_Engine.bat     ← Direct 1-Click Launcher for Hardsub Studio
+├── Run_Subtitle_Engine.bat    ← Direct 1-Click Launcher for Subtitle Engine
+├── Start_Web_UI.bat           ← Direct 1-Click Launcher for Web UI Dashboard
+│
 ├── agents/
-│   ├── master.py              ← Pipeline orchestrator (Phases 1–7) & hardware/cancellation management
-│   ├── downloader_agent.py    ← Multi-platform downloader with EJS JS solver & Netscape cookies
+│   ├── master.py              ← Engine 1 orchestrator (Phases 1–7) & hardware management
+│   ├── downloader_agent.py    ← Multi-platform downloader (YouTube, DramaBox, ReelShort)
 │   ├── video_agent.py         ← Video metadata: FPS, duration, resolution (OpenCV & FFprobe)
-│   ├── audio_agent.py         ← Audio extract + Fast Whisper STT (CUDA FP16 / INT8) + Demucs GPU Isolation
-│   ├── writer_agent.py        ← 1:1 Dialogue Translation (Gemini 3.5 Flash) + Gender Tagging + Action Bridge
-│   ├── seo_agent.py           ← Viral Title, Description, Tags, and Hashtags generator (Gemini 3.5 Flash)
+│   ├── audio_agent.py         ← Audio extract + Fast Whisper STT (CUDA FP16 / INT8) + Demucs
+│   ├── writer_agent.py        ← 1:1 Dialogue Translation (Gemini 3.5 Flash) + Action Bridge
+│   ├── seo_agent.py           ← Viral Title, Description, Tags, and Hashtags generator
 │   ├── voice_agent.py         ← Multi-Voice TTS (Thiha Male / Nilar Female) & Time Stretch
-│   ├── video_merger_agent.py  ← Video Merger, Dynamic Audio Ducking, 9:16 Reels Canvas, NVENC/QSV Encoder
+│   ├── video_merger_agent.py  ← Single-Pass Merger, Audio Ducking, NVENC/QSV Hardware Encoder
 │   ├── thumbnail_agent.py     ← High-CTR Golden Yellow Top-Center Thumbnail Generator
 │   └── qa_agent.py            ← Sync score & language naturalness QA review
 │
 ├── brain/
 │   ├── memory.py              ← Pydantic shared state (MovieState with atomic JSON persistence)
 │   ├── planner.py             ← Overnight Batch Processor with auto API key rotation
-│   ├── prompts.py             ← LLM prompt templates (Dialogue Translation, SEO, QA)
+│   ├── prompts.py             ← LLM prompt templates (Dialogue, SEO, QA, Persona translation)
 │   ├── config.py              ← config.json loader with Gemini 3.5 Flash defaults
-│   ├── gemini_client.py       ← Gemini API client with safe multi-part parsing & 8-model fallback rotation
-│   └── sqlite_store.py        ← SQLite WAL-mode local database for movie states and job logs
+│   ├── gemini_client.py       ← Gemini API client with safe parsing & 8-model fallback rotation
+│   └── sqlite_store.py        ← SQLite local database for multi-engine state & job logs
 │
 ├── templates/
-│   └── index.html             ← Modern Glassmorphic Web UI Dashboard with Live Timer & Controls
+│   └── index.html             ← Modern Glassmorphic Web UI (Tabs for Recap, Subtitle & Hardsub)
 │
-├── web_ui.py                  ← FastAPI Web Dashboard (Direct Upload, Live Timing SSE Logs, Force Stop API)
 ├── AI_Movie_Translate_Colab.ipynb  ← Official Google Colab One-Click Dedicated GPU Notebook
 ├── AI_Movie_Translate_Kaggle.ipynb ← Official Kaggle One-Click Dual T4 Dedicated GPU Notebook
 ├── config.json                ← Active runtime configuration (API keys, branding, models)
 ├── config.example.json        ← Default configuration template
-├── cookies.txt                ← Netscape cookie file for YouTube, DramaBox, and ReelShort
-├── main.py                    ← CLI entry point with --sub-mode and --resolution flags
+├── cookies.txt                ← Netscape cookie file for YouTube anti-bot bypass
 ├── requirements.txt           ← Python package dependencies
 ├── assets/                    ← Reference voice samples, cookies, and branding assets
 ├── movies/                    ← Place source video files here
@@ -295,35 +320,52 @@ pip install -r requirements.txt
 ## 🚀 Usage
 
 ### 🌐 Method 1: Web UI Dashboard (Recommended)
+Double-click [`Start_Web_UI.bat`](Start_Web_UI.bat) or run:
 ```bash
 python web_ui.py
 ```
 *Open your browser at: `http://localhost:5000`*
 
+* **3 Dedicated Engine Tabs:** Switch effortlessly between **🎬 Recap Studio**, **📝 Subtitle Engine**, and **🎞️ Hardsub Studio**.
 * **Direct Video Download & Upload:** Paste any YouTube, DramaBox, or ReelShort URL, or click **📁 Upload** to select a file from your computer.
-* **Video Format Selector:** Choose between `🌟 Both (16:9 + 9:16)`, `🖥️ 16:9 Landscape`, and `📱 9:16 Vertical Reels`.
+* **Video Format Selector:** Choose between `🌟 Both (16:9 + 9:16)`, `📺 16:9 Landscape`, and `📱 9:16 Vertical Reels`.
 * **Subtitle Style Presets:** Choose from 5 presets (`box_black`, `yellow_pop`, `white_stroke`, `cyan_cyber`, `crimson_box`) with live preview canvas.
-* **Subtitle Mode Selector:** Choose between `🔥 Burn Subtitles (Hardsub)` and `🎙️ Voiceover Only (Clean Frame)`.
-* **Resolution Quality Selector:** Choose between `🌟 1080p Full HD` and `⚡ 720p HD`.
-* **Overnight Batch Queue:** Process multiple files/links sequentially overnight with automatic API key failover.
-* **1-Click Force Stop:** Click `🛑 Force Stop Pipeline` at any time to immediately cancel execution.
+* **Anti-Copyright & Blur Controls:** Enable Mirroring, Color Grading EQ, Audio Pitch Shields, and Vision AI Subtitle Blur with custom heights (12%–30%).
+* **1-Click Force Stop:** Click `🛑 Force Stop Pipeline` at any time to immediately cancel execution and release resources.
 
 ### 💻 Method 2: Command Line (CLI)
+
+#### 🎬 Engine 1: AI Movie Recap Studio
 ```bash
-# Run single movie recap with default settings
-python main.py --input "movies/my_movie.mp4"
+# Process single video or YouTube URL
+python main.py "movies/my_movie.mp4"
 
-# Run with TikTok/Reels yellow subtitles and 9:16 vertical format
-python main.py --input "movies/my_movie.mp4" --format 9:16 --sub-style yellow_pop
+# Process with 9:16 vertical Reels and TikTok yellow subtitle preset
+python main.py "movies/my_movie.mp4" --format 9:16 --sub-style yellow_pop
 
-# Run batch processing with Netflix cinema box subtitles
-python main.py --batch --sub-style box_black --format both
+# Batch process all videos in movies/ folder
+python main.py --batch --format both
+```
 
-# Resume interrupted pipeline from last saved checkpoint (default)
-python main.py --input "movies/my_movie.mp4" --resume
+#### 📝 Engine 2: YouTube Subtitle & Transcript Studio
+```bash
+# Extract 1:1 original timestamps and produce 6 deliverable outputs
+python subtitle_engine.py -i "https://youtu.be/..." --source-lang auto
 
-# Force a fresh run, ignoring previous checkpoints
-python main.py --input "movies/my_movie.mp4" --fresh
+# Specify custom project name
+python subtitle_engine.py -i "movies/input.mp4" --name "My_Subtitle_Project"
+```
+
+#### 🎞️ Engine 3: 100% Original Audio & Burmese Hardsub Studio
+```bash
+# Run with dual 16:9 + 9:16 export, Vision AI blur, and anti-copyright shields
+python hardsub_engine.py "https://youtu.be/..." --format both --res 1080p
+
+# Run with custom Netflix box style and bottom 25% subtitle blur
+python hardsub_engine.py "movies/input.mp4" --style box_black --blur yes --blur-height 0.25
+
+# Dispatch via main.py dispatcher
+python main.py "movies/input.mp4" --engine-mode hardsub --format 16:9 --style yellow_pop
 ```
 
 ---

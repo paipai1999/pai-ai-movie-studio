@@ -4,6 +4,37 @@ All notable changes, architectural overhauls, and bug fixes to the AI Movie Tran
 
 ---
 
+## [2.3.0] — 2026-09-19 (Triple-Engine Architecture & Hardsub Studio)
+
+### 🌟 Release Highlights
+This release establishes the **Triple-Engine Architecture**: adding **Engine 3 (100% Original Audio & Burmese Hardsub Studio)** and **Engine 2 (YouTube Subtitle & Transcript Studio)** alongside **Engine 1 (AI Movie Recap Studio)**. Includes Anti-Copyright shields (1.02x scale/crop, color grading, mirror, audio speed shield), Vision AI subtitle blur, Male/Female/Child persona particle translation, resilient translation fallback mapping, and SQLite unified state persistence.
+
+---
+
+### 1. 🎞️ Engine 3: Original Audio & Burmese Hardsub Studio
+- **100% Original Audio Preservation:** Zero TTS overwrite; preserves original voice performances, ambient sound effects, and musical score intact.
+- **Vision AI Subtitle Blur:** Automatically detects and applies smooth Gaussian box-blur to existing hardcoded subtitles at customizable heights (12%–30%).
+- **Anti-Copyright Protection Matrix:** Combines subtle 1.02x video zoom/crop, contrast/saturation color grading, optional horizontal mirroring, and audio time-stretch fingerprint shield (`atempo=1.008`).
+- **Faithful 1:1 Persona Translation:** Automatically detects and applies colloquial Myanmar particles for Male (ကျနော်/ခင်ဗျာ), Female (ကျွန်မ/ရှင်), and Child (သား/သမီး/ပါဗျာ) personas.
+- **Multi-Format Compositing:** Outputs crisp 16:9 Landscape, 9:16 Vertical Reels with dynamic blurred canvas, or dual exports simultaneously.
+- **Persistent Deliverables:** Automatically saves `.mp4`, `.ass`, `.srt`, `records_data.json`, `state.json`, and quality check reports.
+
+---
+
+### 2. 📝 Engine 2: YouTube Subtitle & Transcript Studio
+- **Dual Nuance Translation:** Multi-step pipeline translating foreign dialogue (EN/ZH/JA/KO/TH) into natural spoken Burmese (စကားပြောဟန်).
+- **6 Deliverable Exports:** Generates `01_video_original.mp4`, `02_transcript_original.txt`, `03_transcript_english.txt`, `04_transcript_burmese.txt`, `05_subtitle_burmese.srt`, `06_quality_check_report.txt`, and `records_data.json`.
+
+---
+
+### 3. 🛡️ System Robustness, Storage Leak Fixes & Resilient Fallbacks
+- **Temp Download Cleanup:** Safely purges temporary video download directories (`temp_dl/` and `temp/yt_dl/`) after copying source videos, saving 50% disk space per project.
+- **Resilient Translation Matching:** Upgraded chunk matching to map translations by ID and index on retries, preventing entire batches from reverting to raw foreign text if the LLM drops a single line.
+- **Special Character Escaping:** Escapes single quotes and colons in subtitle filenames to prevent FFmpeg filtergraph parse failures.
+- **Unified SQLite Persistence:** Hooked `save_custom_movie_state(...)` across all engines to ensure consistent state management in `outputs/movie_metadata.db`.
+
+---
+
 ## [2.2.0] — 2026-09-06 (Major Architectural Release)
 
 ### 🌟 Release Highlights

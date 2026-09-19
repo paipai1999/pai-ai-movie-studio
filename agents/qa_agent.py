@@ -291,9 +291,10 @@ class QAAgent:
             return state
 
         models_dict = gemini_cfg.get("models", {})
-        model_heavy = models_dict.get("heavy", "gemini-3.5-flash")
-        model_workhorse = models_dict.get("workhorse", "gemini-3.5-flash-lite")
         qa_cfg = config_data.get("qa", {})
+        # Prefer workhorse (gemini-3.5-flash-lite) for video QA to prevent HTTP 429 rate limit stalls
+        model_workhorse = models_dict.get("workhorse") or gemini_cfg.get("model") or "gemini-3.5-flash-lite"
+        model_video_qa = qa_cfg.get("video_model") or model_workhorse
         do_sync_check = qa_cfg.get("sync_check", True)
         do_language_check = qa_cfg.get("language_check", True)
 
@@ -337,7 +338,7 @@ class QAAgent:
                 # ── Task 1: Extract Myanmar voiceover + visual action details ──
                 print("[*] QAAgent: Extracting output video transcript & visual actions...")
                 output_transcript = self._extract_output_video_transcript_with_file(
-                    recap_file_name, recap_working_key, state, model_heavy
+                    recap_file_name, recap_working_key, state, model_video_qa
                 )
                 if output_transcript:
                     state.output_video_transcript = output_transcript
@@ -347,7 +348,7 @@ class QAAgent:
                 if do_sync_check:
                     print("[*] QAAgent: Running sync review on uploaded video...")
                     sync_result = self._run_sync_check_with_file(
-                        recap_file_name, recap_working_key, state, model_heavy
+                        recap_file_name, recap_working_key, state, model_video_qa
                     )
                     if sync_result:
                         qa_results["sync"] = sync_result

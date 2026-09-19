@@ -1256,7 +1256,34 @@
     <div class="hero-card animate-in">
         <div class="section-label">🚀 Pipeline Control</div>
 
+        <!-- ══ ENGINE SELECTOR ══ -->
+        <div class="engine-tabs-header" style="display:flex; gap:10px; margin-bottom:1.5rem; background:rgba(0,0,0,0.03); padding:6px; border-radius:12px; border:1px solid rgba(0,0,0,0.06); flex-wrap:wrap;">
+            <button type="button" id="btn-engine-recap" class="engine-tab-btn active" onclick="switchEngine('recap')" style="flex:1; min-width:260px; display:flex; align-items:center; justify-content:center; gap:10px; padding:12px 18px; border-radius:10px; border:none; cursor:pointer; font-weight:700; font-size:0.95rem; background:white; color:var(--accent); box-shadow:0 4px 12px rgba(0,0,0,0.06); transition:all 0.25s ease;">
+                <span style="font-size:1.4rem;">🎬</span>
+                <div style="text-align:left;">
+                    <div style="font-weight:800; font-size:0.95rem;">Movie Recap & Video Studio</div>
+                    <div style="font-size:0.75rem; font-weight:400; opacity:0.8; color:var(--muted);">Full AI Storyteller, Voiceover, 9:16 Reels Canvas, BGM & Watermark</div>
+                </div>
+            </button>
+            <button type="button" id="btn-engine-subtitle" class="engine-tab-btn" onclick="switchEngine('subtitle')" style="flex:1; min-width:260px; display:flex; align-items:center; justify-content:center; gap:10px; padding:12px 18px; border-radius:10px; border:none; cursor:pointer; font-weight:700; font-size:0.95rem; background:transparent; color:var(--text); opacity:0.75; transition:all 0.25s ease;">
+                <span style="font-size:1.4rem;">💬</span>
+                <div style="text-align:left;">
+                    <div style="font-weight:800; font-size:0.95rem;">Burmese Subtitle & Transcript</div>
+                    <div style="font-size:0.75rem; font-weight:400; opacity:0.8; color:var(--muted);">100% Timestamps, Non-EN to EN, Burmese .SRT & .TXT</div>
+                </div>
+            </button>
+            <button type="button" id="btn-engine-hardsub" class="engine-tab-btn" onclick="switchEngine('hardsub')" style="flex:1; min-width:260px; display:flex; align-items:center; justify-content:center; gap:10px; padding:12px 18px; border-radius:10px; border:none; cursor:pointer; font-weight:700; font-size:0.95rem; background:transparent; color:var(--text); opacity:0.75; transition:all 0.25s ease;">
+                <span style="font-size:1.4rem;">🔥</span>
+                <div style="text-align:left;">
+                    <div style="font-weight:800; font-size:0.95rem;">Original Audio & Hardsub Studio</div>
+                    <div style="font-size:0.75rem; font-weight:400; opacity:0.8; color:var(--muted);">100% Original Audio, Vision AI Subtitle Blur, Gender-Aware 1:1 Hardsub</div>
+                </div>
+            </button>
+        </div>
+
+
         <!-- Mode Tabs -->
+        <div id="recap-engine-panel">
         <div class="tabs">
             <button id="tab-single" class="tab-btn active" onclick="switchMode('single')">🎥 Single Video</button>
             <button id="tab-batch" class="tab-btn" onclick="switchMode('batch')">📋 Batch Queue</button>
@@ -1298,10 +1325,20 @@
             <textarea class="batch-textarea" id="batch-inputs"
                 placeholder="Paste multiple URLs or video paths — one per line:&#10;https://www.youtube.com/watch?v=...&#10;https://www.dramaboxdb.com/ep/...&#10;movies/my_local_file.mp4"></textarea>
             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.75rem; flex-wrap:wrap; gap:0.5rem;">
-                <span style="font-size:0.82rem; color:var(--muted);">🌙 Runs sequentially overnight with auto API key rotation</span>
-                <button class="btn-primary btn-success" id="btn-batch" onclick="startBatchJob()">
-                    🚀 Start Overnight Batch
-                </button>
+                <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                    <span style="font-size:0.85rem; font-weight:700; color:var(--text);">⚙️ Engine Mode:</span>
+                    <select class="lang-select" id="select-batch-engine" style="padding:0.4rem 0.8rem; font-size:0.85rem; border-radius:8px; font-weight:700; background:var(--surface2); color:var(--primary); border:1px solid rgba(255,255,255,0.15);">
+                        <option value="recap" selected>🎬 Engine 1: AI Movie Recap & Dubbing</option>
+                        <option value="hardsub">🛡️ Engine 3: Smart Blur & Myanmar Hardsub</option>
+                        <option value="subtitle">📝 Engine 2: Pure Subtitle Translation (.srt/.vtt)</option>
+                    </select>
+                </div>
+                <div style="display:inline-flex; align-items:center; gap:0.75rem;">
+                    <span style="font-size:0.82rem; color:var(--muted);">🌙 Runs sequentially overnight with auto API key rotation</span>
+                    <button class="btn-primary btn-success" id="btn-batch" onclick="startBatchJob()">
+                        🚀 Start Overnight Batch
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -1490,6 +1527,182 @@
                 </div>
             </div>
         </div>
+        </div>
+        <!-- ══ SUBTITLE ENGINE PANEL ══ -->
+        <div id="subtitle-engine-panel" style="display:none; margin-top:0.5rem;">
+            <div style="background:rgba(124,58,237,0.07); border:1px solid rgba(124,58,237,0.22); border-radius:12px; padding:14px 18px; margin-bottom:1.25rem;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                    <span style="font-size:1.2rem;">✨</span>
+                    <strong style="color:#7c3aed; font-size:0.95rem;">Burmese Subtitle & Transcript Engine Active</strong>
+                </div>
+                <p style="font-size:0.82rem; color:var(--text); line-height:1.5; margin:0;">
+                    ဤ Engine သည် YouTube ဗီဒီယိုမှ Original Timestamps များကို ၁၀၀% မူရင်းအတိုင်း ထိန်းသိမ်းပြီး မူရင်းစကားပြောအား အင်္ဂလိပ်သို့ ကြားခံပြန်ဆိုကာ သဘာဝကျသော စကားပြောဟန် မြန်မာစာတန်းထိုး (.srt) နှင့် စာသား (.txt) ဖိုင်များကို ထုတ်ပေးပါသည်။ 
+                    <span style="color:#7c3aed; font-weight:600;">(TTS Voiceover, Reels 9:16 Canvas, BGM Mixing နှင့် Outro Cards များ မပါဝင်ဘဲ သီးသန့် အမြန်ဆုံး အလုပ်လုပ်ပါသည်)</span>
+                </p>
+                <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;">
+                    <span style="background:rgba(124,58,237,0.12); color:#6d28d9; padding:2px 8px; border-radius:6px; font-size:0.75rem; font-weight:600;">🎬 01_video_original.mp4</span>
+                    <span style="background:rgba(124,58,237,0.12); color:#6d28d9; padding:2px 8px; border-radius:6px; font-size:0.75rem; font-weight:600;">📝 02_transcript_original.txt</span>
+                    <span style="background:rgba(124,58,237,0.12); color:#6d28d9; padding:2px 8px; border-radius:6px; font-size:0.75rem; font-weight:600;">🌐 03_transcript_english.txt</span>
+                    <span style="background:rgba(124,58,237,0.12); color:#6d28d9; padding:2px 8px; border-radius:6px; font-size:0.75rem; font-weight:600;">📖 04_transcript_burmese.txt</span>
+                    <span style="background:rgba(124,58,237,0.12); color:#6d28d9; padding:2px 8px; border-radius:6px; font-size:0.75rem; font-weight:600;">💬 05_subtitle_burmese.srt</span>
+                    <span style="background:rgba(124,58,237,0.12); color:#6d28d9; padding:2px 8px; border-radius:6px; font-size:0.75rem; font-weight:600;">📊 06_quality_check_report.txt</span>
+                </div>
+            </div>
+
+            <div class="input-row" style="position:relative; margin-bottom:1rem;">
+                <input class="url-input" type="text" id="input-source-sub" placeholder="Paste YouTube URL or local video path for Subtitle Generation...">
+                <input type="file" id="file-upload-sub" accept="video/*" style="display:none;" onchange="handleSubVideoUpload(this)">
+                <button class="btn-primary" id="btn-upload-sub" type="button" style="background:white; border:1px solid rgba(0,0,0,0.1); color:var(--text); box-shadow:0 4px 10px rgba(0,0,0,0.03); flex-shrink:0; white-space:nowrap;" onclick="document.getElementById('file-upload-sub').click()" title="Upload video file">
+                    <span id="btn-upload-sub-text">📁 Upload</span>
+                </button>
+                <button class="btn-primary" id="btn-cookies-sub" type="button" style="background:rgba(255,165,2,0.14); border:1px solid rgba(255,165,2,0.35); color:#d97706; font-weight:700; padding:0.5rem 0.9rem; flex-shrink:0; white-space:nowrap;" onclick="openCookiesModal()" title="Manage YouTube Cookies">
+                    🍪 Cookies
+                </button>
+                <button class="btn-primary" id="btn-start-sub" onclick="startSubtitleJob()" style="background:linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); flex-shrink:0; white-space:nowrap; box-shadow:0 4px 14px rgba(124,58,237,0.35); color:white; font-weight:700;">
+                    <span id="btn-start-sub-text">▶ Generate Subtitles & Transcripts</span>
+                </button>
+            </div>
+
+            <div style="display:flex; flex-wrap:wrap; gap:1.25rem; align-items:center; background:rgba(0,0,0,0.02); padding:12px 16px; border-radius:10px; border:1px solid rgba(0,0,0,0.05);">
+                <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                    <span style="color:var(--muted); font-weight:700; font-size:0.82rem;">🏷️ Project Name:</span>
+                    <input type="text" id="input-sub-proj-name" placeholder="Optional custom slug" style="padding:0.4rem 0.75rem; font-size:0.82rem; border-radius:8px; border:1px solid rgba(0,0,0,0.1); width:210px;">
+                </div>
+                <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                    <span style="color:var(--muted); font-weight:700; font-size:0.82rem;">🌐 Source Language:</span>
+                    <select class="lang-select" id="select-sub-source-lang" style="padding:0.4rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600;">
+                        <option value="auto" selected>🤖 Auto Detect (အလိုအလျောက်)</option>
+                        <option value="en">🇺🇸 English (အင်္ဂလိပ်)</option>
+                        <option value="zh">🇨🇳 Chinese (中文 / တရုတ်)</option>
+                        <option value="ja">🇯🇵 Japanese (日本語 / ဂျပန်)</option>
+                        <option value="ko">🇰🇷 Korean (한국어 / ကိုရီးယား)</option>
+                        <option value="th">🇹🇭 Thai (ภาษาไทย / ထိုင်း)</option>
+                    </select>
+                </div>
+                <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                    <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.82rem; font-weight:600; cursor:pointer; color:var(--text);">
+                        <input type="checkbox" id="chk-force-whisper">
+                        🎙️ Force Faster-Whisper STT (YouTube Subs ရှိသော်လည်း အသံမှ စာသားပြန်ယူရန်)
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ HARDSUB ENGINE PANEL ══ -->
+        <div id="hardsub-engine-panel" style="display:none; margin-top:0.5rem;">
+            <div style="background:rgba(255,107,107,0.07); border:1px solid rgba(255,107,107,0.25); border-radius:12px; padding:14px 18px; margin-bottom:1.25rem;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                    <span style="font-size:1.2rem;">🔥</span>
+                    <strong style="color:#ff5252; font-size:0.95rem;">100% Original Audio & Burmese Hardsub Studio Active</strong>
+                    <span style="background:rgba(255,107,107,0.15); color:#ff5252; padding:2px 8px; border-radius:6px; font-size:0.72rem; font-weight:700;">Zero TTS Overwrite</span>
+                </div>
+                <p style="font-size:0.82rem; color:var(--text); line-height:1.5; margin:0;">
+                    ဤ Engine သည် မူရင်း Original Audio (အသံဖမ်းယူမှု၊ နောက်ခံဂီတ၊ သဘာဝအသံအကျိုးသက်ရောက်မှုများ) ကို ၁၀၀% မပျက်မစီး အပြည့်အဝ ထိန်းသိမ်းပါသည်။ မူရင်း ဗီဒီယိုပါ စာတန်းများကို Vision AI ဖြင့် Blur ဖျက်ပေးပြီး မူရင်း အဓိပ္ပါယ် မကွဲလွှဲစေဘဲ Male (ကျနော်/ခင်ဗျာ), Female (ကျွန်မ/ရှင်), Child (သား/သမီး/ပါဗျာ) အသုံးအနှုန်းများ တိကျစွာဖြင့် မြန်မာစာတန်းထိုး Hardsub အဖြစ် အရည်အသွေးမြင့် Render ပြုလုပ်ပေးပါသည်။
+                </p>
+                <div style="margin-top:10px; display:flex; flex-wrap:wrap; gap:6px;">
+                    <span style="background:rgba(255,107,107,0.12); color:#e11d48; padding:2px 8px; border-radius:6px; font-size:0.75rem; font-weight:600;">🛡️ Anti-Copyright (Scale 1.02x + Color EQ)</span>
+                    <span style="background:rgba(255,107,107,0.12); color:#e11d48; padding:2px 8px; border-radius:6px; font-size:0.75rem; font-weight:600;">🔍 Vision AI Subtitle Blur</span>
+                    <span style="background:rgba(255,107,107,0.12); color:#e11d48; padding:2px 8px; border-radius:6px; font-size:0.75rem; font-weight:600;">👥 Gender & Age Awareness (ကျနော်/ကျွန်မ/သား)</span>
+                    <span style="background:rgba(255,107,107,0.12); color:#e11d48; padding:2px 8px; border-radius:6px; font-size:0.75rem; font-weight:600;">🎵 100% Original Audio Preserved</span>
+                    <span style="background:rgba(255,107,107,0.12); color:#e11d48; padding:2px 8px; border-radius:6px; font-size:0.75rem; font-weight:600;">📐 16:9 + 9:16 Reels Canvas</span>
+                </div>
+            </div>
+
+            <!-- Single Input Row for Hardsub -->
+            <div class="input-row" style="position:relative; margin-bottom:1rem;">
+                <input class="url-input" type="text" id="input-source-hardsub" placeholder="Paste YouTube / DramaBox URL or local video path for Hardsub...">
+                <input type="file" id="file-upload-hardsub" accept="video/*" style="display:none;" onchange="handleHardsubVideoUpload(this)">
+                <button class="btn-primary" id="btn-upload-hardsub" type="button" style="background:white; border:1px solid rgba(0,0,0,0.1); color:var(--text); box-shadow:0 4px 10px rgba(0,0,0,0.03); flex-shrink:0; white-space:nowrap;" onclick="document.getElementById('file-upload-hardsub').click()" title="Upload video file">
+                    <span id="btn-upload-hardsub-text">📁 Upload</span>
+                </button>
+                <button class="btn-primary" id="btn-cookies-hardsub" type="button" style="background:rgba(255,165,2,0.14); border:1px solid rgba(255,165,2,0.35); color:#d97706; font-weight:700; padding:0.5rem 0.9rem; flex-shrink:0; white-space:nowrap;" onclick="openCookiesModal()" title="Manage YouTube Cookies">
+                    🍪 Cookies
+                </button>
+                <button class="btn-primary" id="btn-start-hardsub" onclick="startHardsubJob()" style="background:linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%); flex-shrink:0; white-space:nowrap; box-shadow:0 4px 14px rgba(255,75,43,0.35); color:white; font-weight:700;">
+                    <span id="btn-start-hardsub-text">🔥 Start Hardsub Render</span>
+                </button>
+            </div>
+
+            <!-- Hardsub Options Strip -->
+            <div style="display:flex; flex-wrap:wrap; gap:1.25rem; align-items:center; background:white; padding:14px 18px; border-radius:12px; border:1px solid rgba(0,0,0,0.07); box-shadow:0 4px 12px rgba(0,0,0,0.02); margin-bottom:1rem;">
+                <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                    <span style="color:var(--muted); font-weight:700; font-size:0.82rem;">🌐 Source Audio:</span>
+                    <select class="lang-select" id="select-hardsub-source-lang" style="padding:0.4rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600;">
+                        <option value="auto" selected>🤖 Auto Detect (အလိုအလျောက်)</option>
+                        <option value="zh">🇨🇳 Chinese (中文 / တရုတ်)</option>
+                        <option value="en">🇺🇸 English (အင်္ဂလိပ်)</option>
+                        <option value="th">🇹🇭 Thai (ภาษาไทย / ထိုင်း)</option>
+                        <option value="ko">🇰🇷 Korean (한국어 / ကိုရီးယား)</option>
+                        <option value="ja">🇯🇵 Japanese (日本語 / ဂျပန်)</option>
+                    </select>
+                </div>
+                <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                    <span style="color:var(--muted); font-weight:700; font-size:0.82rem;">📐 Aspect Ratio:</span>
+                    <select class="lang-select" id="select-hardsub-video-format" style="padding:0.4rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600;">
+                        <option value="both" selected>🎬 Both (16:9 + 9:16 Reels) — Dual Export</option>
+                        <option value="16:9">📺 16:9 Landscape (YouTube / Standard)</option>
+                        <option value="9:16">📱 9:16 Vertical (Reels / TikTok / Shorts)</option>
+                    </select>
+                </div>
+                <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                    <span style="color:var(--muted); font-weight:700; font-size:0.82rem;">⚙️ Resolution:</span>
+                    <select class="lang-select" id="select-hardsub-resolution" style="padding:0.4rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600;">
+                        <option value="1080p" selected>🌟 1080p Full HD (Crisp / အကြည်ဆုံး)</option>
+                        <option value="720p">⚡ 720p HD (Faster Render / ပိုမြန်မည်)</option>
+                    </select>
+                </div>
+                <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                    <span style="color:var(--muted); font-weight:700; font-size:0.82rem;">🎨 Subtitle Style:</span>
+                    <select class="lang-select" id="select-hardsub-style" style="padding:0.4rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600;">
+                        <option value="box_black" selected>⬛ Cinema Box (Netflix Style)</option>
+                        <option value="yellow_pop">🟡 TikTok / Reels Pop (Yellow & Black)</option>
+                        <option value="white_stroke">⚪ Classic Movie White (Drop Shadow)</option>
+                        <option value="cyan_cyber">🔷 Cyber Cyan (Sci-Fi Blue)</option>
+                        <option value="crimson_box">🟥 Thriller Crimson (Dark Red Box)</option>
+                    </select>
+                </div>
+                <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                    <span style="color:var(--muted); font-weight:700; font-size:0.82rem;">🔍 Subtitle Blur:</span>
+                    <select class="lang-select" id="select-hardsub-blur" style="padding:0.4rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600;">
+                        <option value="auto" selected>🤖 Auto Detect (Vision AI Subtitle Blur)</option>
+                        <option value="yes">📝 Force Blur (အောက်ခြေစာတန်း အမြဲ Blur မည်)</option>
+                        <option value="no">🚫 Disable Blur (Blur မလုပ်ပါ)</option>
+                    </select>
+                </div>
+                <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                    <span style="color:var(--muted); font-weight:700; font-size:0.82rem;">📏 Blur Height:</span>
+                    <select class="lang-select" id="select-hardsub-blur-height" style="padding:0.4rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600;" title="Height of subtitle area to blur from bottom">
+                        <option value="0.18" selected>Standard (18% bottom)</option>
+                        <option value="0.12">Compact / 1-Line (12% bottom)</option>
+                        <option value="0.25">Tall / 2-Lines (25% bottom)</option>
+                        <option value="0.30">Wide / Tall (30% bottom)</option>
+                    </select>
+                </div>
+                <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                    <span style="color:var(--muted); font-weight:700; font-size:0.82rem;">🏷️ Project Name:</span>
+                    <input type="text" id="input-hardsub-proj-name" placeholder="Optional custom slug" style="padding:0.4rem 0.75rem; font-size:0.82rem; border-radius:8px; border:1px solid rgba(0,0,0,0.1); width:180px;">
+                </div>
+                <div style="display:inline-flex; align-items:center; gap:1rem; flex-wrap:wrap; margin-top:4px;">
+                    <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.82rem; font-weight:600; cursor:pointer; color:var(--text);" title="1.02x zoom & subtle color grade to evade Content ID">
+                        <input type="checkbox" id="chk-hardsub-color-grading" checked>
+                        🛡️ Anti-Copyright (1.02x Zoom & Color EQ)
+                    </label>
+                    <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.82rem; font-weight:600; cursor:pointer; color:var(--text);" title="Subtly perturb audio tempo (atempo=1.008) to evade audio Content ID fingerprinting">
+                        <input type="checkbox" id="chk-hardsub-audio-copyright">
+                        🎵 Audio Shield (atempo=1.008)
+                    </label>
+                    <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.82rem; font-weight:600; cursor:pointer; color:var(--text);">
+                        <input type="checkbox" id="chk-hardsub-mirror">
+                        🪞 Mirror Video (ဘယ်ညာလှည့်)
+                    </label>
+                    <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.82rem; font-weight:600; cursor:pointer; color:var(--text);">
+                        <input type="checkbox" id="chk-hardsub-force-whisper">
+                        🎙️ Force Whisper STT (အသံမှ စာသားဖမ်းယူရန်)
+                    </label>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <!-- ── Progress Card ── -->
@@ -1982,6 +2195,238 @@
         });
     })();
 
+    // ── Engine switch ──
+    let currentEngineMode = 'recap';
+
+    function switchEngine(engine) {
+        currentEngineMode = engine;
+        const btnRecap = document.getElementById('btn-engine-recap');
+        const btnSub = document.getElementById('btn-engine-subtitle');
+        const btnHard = document.getElementById('btn-engine-hardsub');
+        const panelRecap = document.getElementById('recap-engine-panel');
+        const panelSub = document.getElementById('subtitle-engine-panel');
+        const panelHard = document.getElementById('hardsub-engine-panel');
+
+        const setActive = (btn, isActive, activeColor) => {
+            if (!btn) return;
+            if (isActive) {
+                btn.classList.add('active');
+                btn.style.background = 'white';
+                btn.style.color = activeColor || 'var(--accent)';
+                btn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.06)';
+                btn.style.opacity = '1';
+            } else {
+                btn.classList.remove('active');
+                btn.style.background = 'transparent';
+                btn.style.color = 'var(--text)';
+                btn.style.boxShadow = 'none';
+                btn.style.opacity = '0.75';
+            }
+        };
+
+        setActive(btnRecap, engine === 'recap', 'var(--accent)');
+        setActive(btnSub, engine === 'subtitle', '#7c3aed');
+        setActive(btnHard, engine === 'hardsub', '#ff4b2b');
+
+        if (panelRecap) panelRecap.style.display = (engine === 'recap') ? 'block' : 'none';
+        if (panelSub) panelSub.style.display = (engine === 'subtitle') ? 'block' : 'none';
+        if (panelHard) panelHard.style.display = (engine === 'hardsub') ? 'block' : 'none';
+    }
+
+    async function handleSubVideoUpload(inputElement) {
+        if (!inputElement.files || inputElement.files.length === 0) return;
+        const file = inputElement.files[0];
+        if (file.name.toLowerCase().endsWith('.txt') || file.name.toLowerCase().includes('cookie')) {
+            handleCookiesFileUpload(inputElement);
+            return;
+        }
+        if (!file.type.startsWith('video/') && !file.name.match(/\.(mp4|mkv|avi|mov|webm|flv|m4v)$/i)) {
+            alert("Please select a valid video file.");
+            inputElement.value = '';
+            return;
+        }
+        const formData = new FormData();
+        formData.append('video', file);
+        const uploadBtnText = document.getElementById('btn-upload-sub-text');
+        const origText = uploadBtnText ? uploadBtnText.innerText : "📁 Upload";
+        if (uploadBtnText) uploadBtnText.innerText = "⏳ Uploading...";
+        document.getElementById('btn-upload-sub').disabled = true;
+        try {
+            const res = await fetch('/api/upload', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                showToast(`🎬 Video uploaded: ${data.filename} ✅`, 'success');
+                document.getElementById('input-source-sub').value = 'movies/' + data.filename;
+                loadMovies();
+            } else {
+                alert("Upload failed: " + (data.error || "Unknown error"));
+            }
+        } catch (err) {
+            alert("Upload error: " + err);
+        } finally {
+            if (uploadBtnText) uploadBtnText.innerText = origText;
+            document.getElementById('btn-upload-sub').disabled = false;
+            inputElement.value = '';
+        }
+    }
+
+    async function handleHardsubVideoUpload(inputElement) {
+        if (!inputElement.files || inputElement.files.length === 0) return;
+        const file = inputElement.files[0];
+        if (file.name.toLowerCase().endsWith('.txt') || file.name.toLowerCase().includes('cookie')) {
+            handleCookiesFileUpload(inputElement);
+            return;
+        }
+        if (!file.type.startsWith('video/') && !file.name.match(/\.(mp4|mkv|avi|mov|webm|flv|m4v)$/i)) {
+            alert("Please select a valid video file.");
+            inputElement.value = '';
+            return;
+        }
+        const formData = new FormData();
+        formData.append('video', file);
+        const uploadBtnText = document.getElementById('btn-upload-hardsub-text');
+        const origText = uploadBtnText ? uploadBtnText.innerText : "📁 Upload";
+        if (uploadBtnText) uploadBtnText.innerText = "⏳ Uploading...";
+        document.getElementById('btn-upload-hardsub').disabled = true;
+        try {
+            const res = await fetch('/api/upload', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                showToast(`🎬 Video uploaded: ${data.filename} ✅`, 'success');
+                document.getElementById('input-source-hardsub').value = 'movies/' + data.filename;
+                loadMovies();
+            } else {
+                alert("Upload failed: " + (data.error || "Unknown error"));
+            }
+        } catch (err) {
+            alert("Upload error: " + err);
+        } finally {
+            if (uploadBtnText) uploadBtnText.innerText = origText;
+            document.getElementById('btn-upload-hardsub').disabled = false;
+            inputElement.value = '';
+        }
+    }
+
+    async function startSubtitleJob() {
+        const input = document.getElementById('input-source-sub').value.trim();
+        if (!input) { showAlert('Please enter a video URL or local path for Subtitle Generation.'); return; }
+        const sourceLanguage = document.getElementById('select-sub-source-lang') ? document.getElementById('select-sub-source-lang').value : 'auto';
+        const projectName = (document.getElementById('input-sub-proj-name') && document.getElementById('input-sub-proj-name').value.trim()) || null;
+        const forceWhisper = document.getElementById('chk-force-whisper') ? document.getElementById('chk-force-whisper').checked : false;
+
+        const btn = document.getElementById('btn-start-sub');
+        const btnText = document.getElementById('btn-start-sub-text');
+        btn.disabled = true;
+        btnText.textContent = 'Generating Subtitles...';
+
+        showProgress('Starting Burmese Subtitle & Transcript Generator...');
+
+        try {
+            const res = await fetch('/api/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    input: input,
+                    engine_mode: 'subtitle',
+                    project_name: projectName,
+                    source_language: sourceLanguage,
+                    force_whisper: forceWhisper
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                if (res.status === 409) {
+                    await checkActiveJob();
+                    return;
+                }
+                throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+            }
+            if (data.error) throw new Error(data.error);
+            if (data.queued) {
+                showToast(`📥 Added to queue! Position #${data.queue_position}.`);
+                btn.disabled = false;
+                btnText.textContent = '▶ Generate Subtitles & Transcripts';
+                checkQueueStatus(true);
+                return;
+            }
+            startStreamingLogs(data.job_id);
+            checkQueueStatus();
+        } catch (e) {
+            showAlert('Error starting subtitle engine: ' + e.message);
+            btn.disabled = false;
+            btnText.textContent = '▶ Generate Subtitles & Transcripts';
+        }
+    }
+
+    async function startHardsubJob() {
+        const input = document.getElementById('input-source-hardsub').value.trim();
+        if (!input) { showAlert('Please enter a video URL or local path for Hardsub.'); return; }
+        
+        const sourceLanguage = document.getElementById('select-hardsub-source-lang') ? document.getElementById('select-hardsub-source-lang').value : 'auto';
+        const videoFormat = document.getElementById('select-hardsub-video-format') ? document.getElementById('select-hardsub-video-format').value : 'both';
+        const resolution = document.getElementById('select-hardsub-resolution') ? document.getElementById('select-hardsub-resolution').value : '1080p';
+        const subtitleStyle = document.getElementById('select-hardsub-style') ? document.getElementById('select-hardsub-style').value : 'box_black';
+        const blurMode = document.getElementById('select-hardsub-blur') ? document.getElementById('select-hardsub-blur').value : 'auto';
+        const projectName = (document.getElementById('input-hardsub-proj-name') && document.getElementById('input-hardsub-proj-name').value.trim()) || null;
+        const blurHeight = document.getElementById('select-hardsub-blur-height') ? parseFloat(document.getElementById('select-hardsub-blur-height').value) : 0.18;
+        const audioAntiCopyright = document.getElementById('chk-hardsub-audio-copyright') ? document.getElementById('chk-hardsub-audio-copyright').checked : false;
+        const colorGrading = document.getElementById('chk-hardsub-color-grading') ? document.getElementById('chk-hardsub-color-grading').checked : true;
+        const mirror = document.getElementById('chk-hardsub-mirror') ? document.getElementById('chk-hardsub-mirror').checked : false;
+        const forceWhisper = document.getElementById('chk-hardsub-force-whisper') ? document.getElementById('chk-hardsub-force-whisper').checked : false;
+
+        const btn = document.getElementById('btn-start-hardsub');
+        const btnText = document.getElementById('btn-start-hardsub-text');
+        btn.disabled = true;
+        btnText.textContent = 'Rendering Hardsub...';
+
+        showProgress('Starting 100% Original Audio & Hardsub Studio...');
+
+        try {
+            const res = await fetch('/api/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    input: input,
+                    engine_mode: 'hardsub',
+                    project_name: projectName,
+                    source_language: sourceLanguage,
+                    force_whisper: forceWhisper,
+                    video_format: videoFormat,
+                    resolution: resolution,
+                    subtitle_style: subtitleStyle,
+                    blur_mode: blurMode,
+                    blur_height: blurHeight,
+                    audio_anti_copyright: audioAntiCopyright,
+                    mirror: mirror,
+                    color_grading: colorGrading,
+                    reels_enabled: (videoFormat === 'both' || videoFormat === '9:16')
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                if (res.status === 409) {
+                    await checkActiveJob();
+                    return;
+                }
+                throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+            }
+            if (data.error) throw new Error(data.error);
+            if (data.queued) {
+                showToast(`📥 Added to queue! Position #${data.queue_position}.`);
+                btn.disabled = false;
+                btnText.textContent = '🔥 Start Hardsub Render';
+                checkQueueStatus(true);
+                return;
+            }
+            startStreamingLogs(data.job_id);
+            checkQueueStatus();
+        } catch (e) {
+            showAlert('Error starting Hardsub pipeline: ' + e.message);
+            btn.disabled = false;
+            btnText.textContent = '🔥 Start Hardsub Render';
+        }
+    }
+
     // ── Mode switch ──
     function switchMode(mode) {
         const sg = document.getElementById('single-group');
@@ -2295,6 +2740,7 @@
                 body: JSON.stringify({
                     input,
                     language: lang,
+                    engine_mode: 'recap',
                     subtitle_mode: hardsubMode,
                     subtitle_style: subtitleStyle,
                     script_engine: scriptEngine,
@@ -2309,7 +2755,9 @@
                     thumbnail_intro: thumbnailIntro,
                     source_language: sourceLanguage,
                     skip_demucs: skipDemucs,
-                    detect_scenes: detectScenes
+                    detect_scenes: detectScenes,
+                    blur_mode: subtitleBlur,
+                    mirror: document.getElementById('chk-mirror') ? document.getElementById('chk-mirror').checked : false
                 })
             });
             const data = await res.json();
@@ -2359,6 +2807,12 @@
         const sourceLanguage = document.getElementById('select-source-lang') ? document.getElementById('select-source-lang').value : 'auto';
         const skipDemucs = document.getElementById('chk-skip-demucs') ? document.getElementById('chk-skip-demucs').checked : false;
         const detectScenes = document.getElementById('chk-scene-detect') ? document.getElementById('chk-scene-detect').checked : false;
+        const batchEngine = document.getElementById('select-batch-engine') ? document.getElementById('select-batch-engine').value : 'recap';
+        const blurMode = document.getElementById('select-hardsub-blur') ? document.getElementById('select-hardsub-blur').value : 'auto';
+        const blurHeight = document.getElementById('select-hardsub-blur-height') ? parseFloat(document.getElementById('select-hardsub-blur-height').value) : 0.18;
+        const colorGrading = document.getElementById('chk-hardsub-color-grading') ? document.getElementById('chk-hardsub-color-grading').checked : true;
+        const audioAntiCopyright = document.getElementById('chk-hardsub-audio-copyright') ? document.getElementById('chk-hardsub-audio-copyright').checked : false;
+        const mirror = document.getElementById('chk-hardsub-mirror') ? document.getElementById('chk-hardsub-mirror').checked : false;
 
         const btn = document.getElementById('btn-batch');
         btn.disabled = true;
@@ -2371,6 +2825,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     inputs,
+                    engine_mode: batchEngine,
                     language: lang,
                     subtitle_mode: hardsubMode,
                     subtitle_style: subtitleStyle,
@@ -2386,7 +2841,12 @@
                     thumbnail_intro: thumbnailIntro,
                     source_language: sourceLanguage,
                     skip_demucs: skipDemucs,
-                    detect_scenes: detectScenes
+                    detect_scenes: detectScenes,
+                    blur_mode: blurMode,
+                    blur_height: blurHeight,
+                    color_grading: colorGrading,
+                    audio_anti_copyright: audioAntiCopyright,
+                    mirror: mirror
                 })
             });
             const data = await res.json();
@@ -2653,7 +3113,6 @@
                 setStatus('error', '❌ Network Error: Could not reach server.');
                 document.getElementById('log-box-wrap').classList.remove('running');
                 document.getElementById('btn-start').disabled = false;
-                if (document.getElementById('spinner')) document.getElementById('spinner').style.display = 'none';
                 document.getElementById('btn-start-text').textContent = '▶ Start Pipeline';
                 document.getElementById('btn-batch').disabled = false;
             }
@@ -2988,7 +3447,7 @@
                 const progress = mdata.progress || 0;
                 const phase = mdata.phase || 'Done';
                 const meta = metadataMap[movie] || {};
-                const safeMovie = movie.replace(/'/g, "\\'");
+                const safeMovie = movie.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 
                 const card = document.createElement('div');
                 card.className = 'output-card';
@@ -3032,8 +3491,15 @@
 
                 let bodyHtml = `
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; padding-bottom:0.6rem; border-bottom:1px solid rgba(255,255,255,0.07); flex-wrap:wrap; gap:0.5rem;">
-                        <h3 style="margin:0;">🎬 ${movie}</h3>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:1.15rem;">${mdata.engine_type === 'subtitle' ? '💬' : (mdata.engine_type === 'hardsub' ? '🛡️' : '🎬')}</span>
+                            <h3 style="margin:0;">${movie}</h3>
+                            <span style="font-size:0.72rem; font-weight:700; padding:0.18rem 0.55rem; border-radius:6px; background:${mdata.engine_type === 'subtitle' ? 'rgba(124,58,237,0.12)' : (mdata.engine_type === 'hardsub' ? 'rgba(255,107,107,0.15)' : 'rgba(255,71,87,0.1)')}; color:${mdata.engine_type === 'subtitle' ? '#7c3aed' : (mdata.engine_type === 'hardsub' ? '#ff5252' : 'var(--accent)')}; border:1px solid ${mdata.engine_type === 'subtitle' ? 'rgba(124,58,237,0.25)' : (mdata.engine_type === 'hardsub' ? 'rgba(255,107,107,0.3)' : 'rgba(255,71,87,0.2)')};">
+                                ${mdata.engine_type === 'subtitle' ? '💬 Subtitle & Transcript' : (mdata.engine_type === 'hardsub' ? '🛡️ Hardsub Studio' : '🎬 Movie Recap')}
+                            </span>
+                        </div>
                         <div style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
+                            <button type="button" class="btn-nav" style="padding:0.32rem 0.75rem; font-size:0.78rem; font-weight:700; background:rgba(124,58,237,0.12); color:#7c3aed; border:1px solid rgba(124,58,237,0.3); border-radius:8px; cursor:pointer;" onclick="openSubtitlePreview('${safeMovie}')" title="Preview Subtitles, Transcripts & Quality Audit">👁️ View Subtitles / Report</button>
                             <a href="/api/download/zip?movie=${safeMovie}" class="btn-success" style="padding:0.32rem 0.75rem; font-size:0.78rem; font-weight:700; text-decoration:none; display:inline-flex; align-items:center; gap:0.3rem; border-radius:8px; background:linear-gradient(135deg, #10b981 0%, #059669 100%); color:#fff; box-shadow:0 3px 10px rgba(16,185,129,0.3);" download title="Download all video, thumbnail, subtitles & script in one ZIP">📦 Download All (ZIP)</a>
                             <button type="button" class="btn-nav" style="padding:0.32rem 0.75rem; font-size:0.78rem; font-weight:700; background:linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color:#fff; border-radius:8px; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:0.3rem; box-shadow:0 3px 10px rgba(99,102,241,0.3);" onclick="saveToDirectory('${safeMovie}')" title="Choose a folder on your PC to save all files directly">📁 Save to Folder</button>
                             <a href="/api/logs/${safeMovie}" target="_blank" class="download-btn" style="padding:0.3rem 0.6rem; font-size:0.75rem; text-decoration:none;">📄 View Log</a>
@@ -3064,7 +3530,10 @@
                             <video controls preload="metadata" style="${vStyle}" src="${url}"></video>
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.6rem; flex-wrap:wrap; gap:0.5rem;">
                                 <span style="font-size:0.78rem; color:var(--muted);">${isReels ? '📱 Safe Zone + Top Hook Title' : '🔥 16:9 Anti-Copyright Video'}</span>
-                                <a class="download-btn" href="${url}" target="_blank" download>⬇️ Download ${isReels ? 'Reels MP4' : 'Recap MP4'}</a>
+                                <div style="display:inline-flex; gap:0.4rem; align-items:center;">
+                                    <button type="button" class="btn-nav" style="padding:0.25rem 0.6rem; font-size:0.75rem; border-radius:6px; cursor:pointer;" onclick="openVideoPlayerModal('${url}', '${safeMovie} - ${fname}')">📺 Cinema Pop-out</button>
+                                    <a class="download-btn" href="${url}" target="_blank" download>⬇️ Download ${isReels ? 'Reels MP4' : 'Recap MP4'}</a>
+                                </div>
                             </div>
                         </div>`;
                     } else if (f.endsWith('.mp3')) {
@@ -3221,39 +3690,6 @@
         }
     }
 
-    async function handleFileUpload(input) {
-        if (!input.files || !input.files[0]) return;
-        const file = input.files[0];
-        const formData = new FormData();
-        formData.append('video', file);
-
-        const btnText = document.getElementById('btn-upload-text');
-        const origText = btnText ? btnText.textContent : '📁 Upload Video / Cookies';
-        if (btnText) btnText.textContent = '⏳ Uploading...';
-
-        try {
-            const res = await fetch('/api/upload', {
-                method: 'POST',
-                body: formData
-            });
-            const data = await res.json();
-            if (res.ok && data.success) {
-                if (data.filename === 'cookies.txt') {
-                    showToast('🍪 YouTube Cookies.txt uploaded and installed successfully! ✅', 'success');
-                } else {
-                    showToast(`🎬 Video uploaded: ${data.filename} ✅`, 'success');
-                    document.getElementById('input-source').value = 'movies/' + data.filename;
-                    loadMovies();
-                }
-            } else {
-                showToast(`❌ Upload failed: ${data.detail || data.error || 'Unknown error'}`, 'error');
-            }
-        } catch (e) {
-            showToast(`❌ Upload error: ${e.message}`, 'error');
-        } finally {
-            if (btnText) btnText.textContent = origText;
-            input.value = '';
-        }
     async function saveToDirectory(movie) {
         if ('showDirectoryPicker' in window) {
             try {
@@ -3729,6 +4165,125 @@
     loadBrandingSettings();
     loadSubStyleSettings();
     checkCookiesStatus();
+
+    // ── Video Player Modal ──
+    function openVideoPlayerModal(url, title) {
+        const modal = document.getElementById('video-player-modal');
+        const video = document.getElementById('video-modal-element');
+        const titleEl = document.getElementById('video-modal-title');
+        if (!modal || !video) return;
+        if (titleEl) titleEl.textContent = title || 'Cinema Video Player';
+        video.src = url;
+        modal.style.display = 'flex';
+        video.play().catch(() => {});
+    }
+
+    function closeVideoPlayerModal() {
+        const modal = document.getElementById('video-player-modal');
+        const video = document.getElementById('video-modal-element');
+        if (video) {
+            video.pause();
+            video.src = '';
+        }
+        if (modal) modal.style.display = 'none';
+    }
+
+    // ── Subtitle & QC Report Modal ──
+    let _subModalData = null;
+    async function openSubtitlePreview(movie) {
+        const modal = document.getElementById('subtitle-preview-modal');
+        if (!modal) return;
+        modal.style.display = 'flex';
+        document.getElementById('sub-modal-title').textContent = movie + ' — Subtitle & Audit';
+        document.getElementById('sub-modal-body').innerHTML = '<div style="color:var(--muted); text-align:center; padding:40px;">⏳ Loading subtitle files and QC report...</div>';
+        try {
+            const res = await fetch(`/api/subtitle/preview/${encodeURIComponent(movie)}`);
+            if (!res.ok) throw new Error('Failed to load project preview');
+            _subModalData = await res.json();
+            switchModalTab('srt');
+        } catch (e) {
+            document.getElementById('sub-modal-body').innerHTML = `<div style="color:#ef4444; padding:20px;">⚠️ Error loading subtitle files: ${e.message}</div>`;
+        }
+    }
+
+    function closeSubtitlePreview() {
+        const modal = document.getElementById('subtitle-preview-modal');
+        if (modal) modal.style.display = 'none';
+        _subModalData = null;
+    }
+
+    function switchModalTab(tab) {
+        ['srt', 'txt', 'qc', 'table'].forEach(t => {
+            const btn = document.getElementById(`tab-modal-${t}`);
+            if (btn) btn.classList.toggle('active', t === tab);
+        });
+        const body = document.getElementById('sub-modal-body');
+        if (!body || !_subModalData) return;
+        if (tab === 'srt') {
+            body.innerHTML = `<pre style="margin:0; white-space:pre-wrap; word-break:break-word;">${_subModalData.srt || 'No .SRT subtitle found for this project.'}</pre>`;
+        } else if (tab === 'txt') {
+            body.innerHTML = `<pre style="margin:0; white-space:pre-wrap; word-break:break-word;">${_subModalData.txt || 'No .TXT transcript found for this project.'}</pre>`;
+        } else if (tab === 'qc') {
+            body.innerHTML = `<pre style="margin:0; white-space:pre-wrap; word-break:break-word; color:#38bdf8;">${_subModalData.qc || 'No Quality Check audit report generated for this project.'}</pre>`;
+        } else if (tab === 'table') {
+            const recs = _subModalData.records || [];
+            if (!recs.length) {
+                body.innerHTML = '<div style="color:var(--muted); padding:20px;">No segment record data found.</div>';
+                return;
+            }
+            let html = '<table style="width:100%; border-collapse:collapse; font-size:0.82rem;"><thead><tr style="border-bottom:2px solid rgba(255,255,255,0.1); text-align:left; color:var(--muted);"><th style="padding:6px;">#</th><th style="padding:6px;">Time</th><th style="padding:6px;">Original</th><th style="padding:6px;">Burmese</th></tr></thead><tbody>';
+            recs.forEach((r, idx) => {
+                const time = `${(r.start_time || 0).toFixed(1)}s - ${(r.end_time || 0).toFixed(1)}s`;
+                html += `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:6px; color:var(--muted);">${idx+1}</td><td style="padding:6px; color:#38bdf8; font-size:0.75rem;">${time}</td><td style="padding:6px;">${r.original_text || ''}</td><td style="padding:6px; color:#10b981; font-weight:600;">${r.translated_text || ''}</td></tr>`;
+            });
+            html += '</tbody></table>';
+            body.innerHTML = html;
+        }
+    }
 </script>
+
+<!-- ══ SUBTITLE & QC REPORT PREVIEW MODAL ══ -->
+<div id="subtitle-preview-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:999999; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+    <div style="background:var(--bg2); width:92%; max-width:980px; height:85vh; border-radius:16px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 24px 60px rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.12);">
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 24px; border-bottom:1px solid rgba(0,0,0,0.08); background:rgba(0,0,0,0.02);">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:1.4rem;">💬</span>
+                <div>
+                    <h3 id="sub-modal-title" style="margin:0; font-size:1.1rem; font-weight:800;">Subtitle Project Preview</h3>
+                    <span id="sub-modal-meta" style="font-size:0.75rem; color:var(--muted);">Burmese Subtitle & Quality Check Audit</span>
+                </div>
+            </div>
+            <button class="btn-nav" onclick="closeSubtitlePreview()" style="background:rgba(0,0,0,0.06); border:none; font-size:1.2rem; cursor:pointer; border-radius:8px; padding:6px 12px;">✕</button>
+        </div>
+        <div style="display:flex; gap:8px; padding:10px 24px; background:rgba(0,0,0,0.02); border-bottom:1px solid rgba(0,0,0,0.06); flex-wrap:wrap;">
+            <button id="tab-modal-srt" class="tab-btn active" onclick="switchModalTab('srt')">💬 Burmese Subtitles (.SRT)</button>
+            <button id="tab-modal-txt" class="tab-btn" onclick="switchModalTab('txt')">📖 Burmese Transcript (.TXT)</button>
+            <button id="tab-modal-qc" class="tab-btn" onclick="switchModalTab('qc')">📊 QC Audit Report</button>
+            <button id="tab-modal-table" class="tab-btn" onclick="switchModalTab('table')">📋 Segment Table (1:1 Alignment)</button>
+        </div>
+        <div id="sub-modal-body" style="padding:20px 24px; overflow-y:auto; flex:1; font-family:'Courier New', monospace; white-space:pre-wrap; font-size:0.88rem; line-height:1.6; color:var(--text); background:rgba(0,0,0,0.01);">
+        </div>
+    </div>
+</div>
+
+<!-- ══ CINEMA VIDEO PLAYER MODAL ══ -->
+<div id="video-player-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:999999; align-items:center; justify-content:center; backdrop-filter:blur(6px);">
+    <div style="background:var(--bg2); width:92%; max-width:960px; border-radius:16px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 24px 70px rgba(0,0,0,0.7); border:1px solid rgba(255,255,255,0.12);">
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid rgba(255,255,255,0.08); background:rgba(0,0,0,0.3);">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:1.3rem;">📺</span>
+                <div>
+                    <h3 id="video-modal-title" style="margin:0; font-size:1.05rem; font-weight:800; color:var(--text);">Cinema Video Player</h3>
+                    <span id="video-modal-meta" style="font-size:0.75rem; color:var(--muted);">Full Resolution Native Streaming Player</span>
+                </div>
+            </div>
+            <button class="btn-nav" onclick="closeVideoPlayerModal()" style="background:rgba(255,255,255,0.08); border:none; font-size:1.2rem; cursor:pointer; border-radius:8px; padding:6px 12px; color:var(--text);">✕</button>
+        </div>
+        <div style="display:flex; justify-content:center; align-items:center; padding:20px; background:#000; min-height:360px; max-height:75vh;">
+            <video id="video-modal-element" controls autoplay preload="auto" style="max-width:100%; max-height:70vh; border-radius:8px; box-shadow:0 4px 30px rgba(0,0,0,0.8);"></video>
+        </div>
+    </div>
+</div>
+
 </body>
 </html>

@@ -17,16 +17,20 @@ echo    [2] 🔗 Process a Single YouTube / TikTok URL or Video File Path
 echo    [3] ⚡ Force Re-Process All Videos in "movies/" (Ignore Completed)
 echo    [4] 🌐 Launch Interactive Web UI (Graphical Dashboard)
 echo    [5] 🗑️  Open Cleanup Utility (Delete Old Outputs or Source Videos)
+echo    [6] 🎞️ Launch Hardsub Studio (Original Audio + Anti-Copyright Shields)
+echo    [7] 📝 Launch Subtitle & Transcript Studio (YouTube to Burmese Subs)
 echo    [0] ❌ Exit
 echo.
 echo ===============================================================================
-set /p choice="👉 Select an option [0-5]: "
+set /p choice="👉 Select an option [0-7]: "
 
 if "%choice%"=="1" goto BATCH
 if "%choice%"=="2" goto SINGLE
 if "%choice%"=="3" goto FORCE
 if "%choice%"=="4" goto WEBUI
 if "%choice%"=="5" goto CLEAN
+if "%choice%"=="6" goto HARDSUB
+if "%choice%"=="7" goto SUBTITLE
 if "%choice%"=="0" goto EXIT
 goto MENU
 
@@ -97,6 +101,16 @@ goto MENU
 cls
 "%PYTHON_EXE%" main.py --clean
 pause
+goto MENU
+
+:HARDSUB
+cls
+call "%~dp0Run_Hardsub_Engine.bat"
+goto MENU
+
+:SUBTITLE
+cls
+call "%~dp0Run_Subtitle_Engine.bat"
 goto MENU
 
 :EXIT

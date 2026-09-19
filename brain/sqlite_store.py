@@ -117,6 +117,55 @@ def save_movie_state(state: MovieState, output_dir: str = "outputs") -> None:
         conn.close()
 
 
+def save_custom_movie_state(
+    project_dir: str,
+    movie_name: str,
+    movie_path: str = "",
+    language: str = "burmese",
+    whisper_model: str = "gemini",
+    progress: int = 100,
+    current_phase: str = "Done",
+    state_dict: Optional[dict] = None,
+    output_dir: str = "outputs"
+) -> None:
+    """Saves custom project state (e.g. HardsubEngine or SubtitleEngine) to SQLite movie_state table."""
+    db_path = ensure_db(output_dir)
+    state_json = json.dumps(state_dict or {}, ensure_ascii=False, indent=2)
+    now = datetime.now(timezone.utc).isoformat()
+
+    conn = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
+    try:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO movie_state (
+                project_dir,
+                movie_name,
+                movie_path,
+                language,
+                whisper_model,
+                progress,
+                current_phase,
+                updated_at,
+                state_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                project_dir,
+                movie_name,
+                movie_path,
+                language,
+                whisper_model,
+                int(progress or 0),
+                current_phase or "",
+                now,
+                state_json,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def load_movie_state(project_dir: str, output_dir: str = "outputs") -> Optional[dict]:
     db_path = get_db_path(output_dir)
     if not os.path.exists(db_path):

@@ -71,5 +71,35 @@ class TestMovieState(unittest.TestCase):
             self.assertEqual(loaded.pipeline_status, "COMPLETED")
             self.assertEqual(loaded.phase_statuses.get("Phase 1"), "COMPLETED")
 
+    def test_custom_movie_state_sqlite_persistence(self):
+        """Verify save_custom_movie_state successfully writes to SQLite and is readable via list_movie_states."""
+        from brain.sqlite_store import save_custom_movie_state, load_movie_state, list_movie_states
+
+        with tempfile.TemporaryDirectory() as td:
+            save_custom_movie_state(
+                project_dir="hardsub_proj_123",
+                movie_name="My Hardsub Drama",
+                movie_path="movies/drama.mp4",
+                language="burmese",
+                whisper_model="faster-whisper",
+                progress=100,
+                current_phase="Completed",
+                state_dict={"engine_type": "hardsub", "records": 42},
+                output_dir=td
+            )
+
+            loaded = load_movie_state("hardsub_proj_123", output_dir=td)
+            self.assertIsNotNone(loaded)
+            self.assertEqual(loaded["movie_name"], "My Hardsub Drama")
+            self.assertEqual(loaded["language"], "burmese")
+            self.assertEqual(loaded["whisper_model"], "faster-whisper")
+            self.assertEqual(loaded["state_json"]["engine_type"], "hardsub")
+            self.assertEqual(loaded["state_json"]["records"], 42)
+
+            all_states = list_movie_states(output_dir=td)
+            self.assertEqual(len(all_states), 1)
+            self.assertEqual(all_states[0]["project_dir"], "hardsub_proj_123")
+
+
 if __name__ == "__main__":
     unittest.main()
