@@ -399,7 +399,7 @@ class SubtitleEngine:
 
     def _transcribe_with_whisper(self, video_path: str, language: str = "auto") -> List[Dict]:
         """Extracts audio and transcribes with millisecond timestamps via Faster-Whisper."""
-        temp_audio = os.path.abspath(os.path.join("temp", "stt_audio.wav"))
+        temp_audio = os.path.abspath(os.path.join("temp", f"stt_audio_{os.getpid()}_{int(time.time() * 1000)}.wav"))
         os.makedirs(os.path.dirname(temp_audio), exist_ok=True)
 
         # Extract 16kHz mono WAV for Whisper
