@@ -541,7 +541,7 @@ class MasterAgent:
                 self._phase("Phase 1: Video & Metadata Analysis", progress=10)
                 self.state = self.video_agent.analyze_metadata(self.state)
                 self.state.phase_durations["Phase 1: Video Analysis"] = round(time.time() - p1_t0, 2)
-                print(f"[⏱️ TIMING] Phase 1 finished in {self.state.phase_durations['Phase 1: Video Analysis']}s")
+                print(f"[TIMING] Phase 1 finished in {self.state.phase_durations['Phase 1: Video Analysis']}s")
                 self.save_checkpoint(PHASE_1_ANALYSIS, "Phase 1: Video & Metadata Analysis")
             else:
                 print("[*] Phase 1: Video & Metadata Analysis skipped (reusing cached metadata).")
@@ -646,7 +646,7 @@ class MasterAgent:
                         self.save_state()
                         raise e
                 self.state.phase_durations["Phase 2 & 3: Audio STT and Scenes"] = round(time.time() - p23_t0, 2)
-                print(f"[⏱️ TIMING] Phase 2 & 3 finished in {self.state.phase_durations['Phase 2 & 3: Audio STT and Scenes']}s")
+                print(f"[TIMING] Phase 2 & 3 finished in {self.state.phase_durations['Phase 2 & 3: Audio STT and Scenes']}s")
                 if run_p2:
                     self.save_checkpoint(PHASE_2_AUDIO, "Phase 2: Audio STT Transcription")
                 if run_p3:
@@ -708,7 +708,7 @@ class MasterAgent:
                     self.state = self.thumbnail_agent.overlay_text(self.state, temp_base_path)
                     
                 self.state.phase_durations["Phase 4: Script, SEO & Thumbnail"] = round(time.time() - p4_t0, 2)
-                print(f"[⏱️ TIMING] Phase 4 finished in {self.state.phase_durations['Phase 4: Script, SEO & Thumbnail']}s")
+                print(f"[TIMING] Phase 4 finished in {self.state.phase_durations['Phase 4: Script, SEO & Thumbnail']}s")
                 self.save_checkpoint(PHASE_4_SCRIPT, "Phase 4: Script Writing, SEO & Thumbnail")
             else:
                 print("[*] Phase 4: Script Writing, SEO & Thumbnail skipped (reusing cached script & thumbnail).")
@@ -720,7 +720,7 @@ class MasterAgent:
                     self._phase("Phase 5: Text-to-Speech Voice Generation", progress=80)
                     self.state = self.voice_agent.generate_voiceover(self.state)
                     self.state.phase_durations["Phase 5: Voice Generation"] = round(time.time() - p5_t0, 2)
-                    print(f"[⏱️ TIMING] Phase 5 finished in {self.state.phase_durations['Phase 5: Voice Generation']}s")
+                    print(f"[TIMING] Phase 5 finished in {self.state.phase_durations['Phase 5: Voice Generation']}s")
                     self.save_checkpoint(PHASE_5_VOICE, "Phase 5: Voice Generation")
                 else:
                     print("[*] Phase 5: Voice Generation skipped (all voice clips already synthesized).")
@@ -749,7 +749,7 @@ class MasterAgent:
                 self._phase("Phase 6: Merging Video + Voiceover + Subtitle Blur", progress=90)
                 self.state = self.video_merger.merge_video(self.state, self.movie_path)
                 self.state.phase_durations["Phase 6: Video Merge & Subtitles"] = round(time.time() - p6_t0, 2)
-                print(f"[⏱️ TIMING] Phase 6 finished in {self.state.phase_durations['Phase 6: Video Merge & Subtitles']}s")
+                print(f"[TIMING] Phase 6 finished in {self.state.phase_durations['Phase 6: Video Merge & Subtitles']}s")
 
                 # Phase 6b: 9:16 Facebook Reels / TikTok Canvas Video Export
                 cfg_data = config.load_config()
@@ -837,7 +837,7 @@ class MasterAgent:
                             recap_video_path=final_video_path,
                         )
                         self.state.phase_durations["Phase 7: QA Review"] = round(time.time() - p7_t0, 2)
-                        print(f"[⏱️ TIMING] Phase 7 finished in {self.state.phase_durations['Phase 7: QA Review']}s")
+                        print(f"[TIMING] Phase 7 finished in {self.state.phase_durations['Phase 7: QA Review']}s")
                         if isinstance(getattr(self.state, "qa_results", None), dict) and self.state.qa_results.get("status") == "completed":
                             self.save_checkpoint(PHASE_7_QA, "Phase 7: QA Review")
                         else:

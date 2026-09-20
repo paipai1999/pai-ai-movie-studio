@@ -28,7 +28,7 @@ def setup_directories():
         os.makedirs(d, exist_ok=True)
 
 def run_interactive_cleanup():
-    print("\n=== 🗑️ MOVIE RECAP CLEANUP UTILITY ===")
+    print("\n=== MOVIE RECAP CLEANUP UTILITY ===")
     print("1. Delete generated outputs (outputs/ folder)")
     print("2. Delete source input videos (movies/ folder)")
     print("3. Clear temporary audio/video cache (temp/ folder)")

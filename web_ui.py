@@ -1,3 +1,22 @@
+"""
+Pai AI Movie Studio - Modern Web UI & RESTful API Backend
+=========================================================
+Burmese:
+  ဤ module သည် AI Movie Recap စနစ်၏ Web Dashboard နှင့် RESTful API ဝန်ဆောင်မှုများကို
+  FastAPI ဖြင့် တည်ဆောက်ထားသော ဗဟိုအချက်အချာ ဖြစ်ပါသည်။
+  အဓိက အစိတ်အပိုင်းများ:
+    - 3-Engine Production Pipeline (Full Movie Recap, Subtitle Engine, Anti-Copyright Hardsub)
+    - Sequential FIFO Queue Worker (အလုပ်များ တန်းစီ၍ တစ်ခုပြီးမှ တစ်ခု အလိုအလျောက် ဆောင်ရွက်ခြင်း)
+    - Zero-Latency SSE Realtime Streaming (Console log များကို Web UI သို့ အချိန်နှင့်တပြေးညီ ပို့ဆောင်ခြင်း)
+    - Multi-Channel Security & Authentication (Token, Bearer Header, Cookie)
+    - System Diagnostics & Hardware Acceleration Health Checks (QSV, NVENC, AMF, Gemini API, Disk)
+
+English:
+  FastAPI-based dashboard backend providing RESTful endpoints, asynchronous queue dispatching,
+  thread-safe execution state management, and real-time Server-Sent Events (SSE) log streaming
+  for automated multi-lingual movie video generation.
+"""
+
 import os
 import sys
 import re
@@ -16,11 +35,12 @@ import urllib.request
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 
 from fastapi import FastAPI, Request, UploadFile, File, HTTPException, Query
 from fastapi.responses import HTMLResponse, FileResponse, PlainTextResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
@@ -38,7 +58,13 @@ from brain import config as cfg
 from brain.config import SUBTITLE_PRESETS
 from main import check_dependencies
 
-# Setup FFmpeg path at startup
+
+# =============================================================================
+# SECTION 1: SYSTEM INITIALIZATION & HARDWARE ACCELERATION
+# (စနစ် စတင်လည်ပတ်ခြင်းနှင့် Hardware အရှိန်မြှင့်စနစ် စစ်ဆေးခြင်း)
+# =============================================================================
+
+# Verify system dependencies (FFmpeg, FFprobe) and detect GPU video encoder
 try:
     check_dependencies()
     _enc = detect_hardware_encoder()
@@ -46,6 +72,7 @@ try:
 except Exception as e:
     print(f"[WARN] check_dependencies failed: {e}")
 
+# Recover from unexpected server crash: mark previously uncompleted running jobs as error/stale
 try:
     stale_count = clean_stale_running_jobs()
     if stale_count > 0:
@@ -53,10 +80,15 @@ try:
 except Exception as e:
     print(f"[WARN] clean_stale_running_jobs notice: {e}")
 
-from fastapi.middleware.cors import CORSMiddleware
+
+# =============================================================================
+# SECTION 2: FASTAPI APP & AUTHENTICATION MIDDLEWARE
+# (FastAPI အက်ပ်နှင့် လုံခြုံရေး စိစစ်မှုစနစ်)
+# =============================================================================
 
 app = FastAPI(title="AI Movie Recap API", version="2.2.0")
 
+# Cross-Origin Resource Sharing (CORS) setup
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -65,10 +97,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 def _is_authenticated(request: Request) -> bool:
+    """
+    Verifies client authentication credentials against WEB_UI_PASSWORD or WEB_UI_TOKEN.
+    အသုံးပြုသူ၏ လျှို့ဝှက်ကုဒ် သို့မဟုတ် Token ကို စစ်ဆေးပေးသည်။
+    Supports 4 verification channels:
+      1. HTTP Authorization: Bearer <token>
+      2. HTTP Header: x-auth-token: <token>
+      3. URL Query Parameter: ?token=<token>
+      4. HTTP Secure Cookie: web_ui_token=<token>
+    """
     auth_secret = os.getenv("WEB_UI_PASSWORD") or os.getenv("WEB_UI_TOKEN")
     if not auth_secret:
-        return True
+        return True  # Authentication disabled if no environment secret is configured
 
     # 1. Bearer token in Authorization header
     auth_header = request.headers.get("Authorization", "")
@@ -77,23 +119,28 @@ def _is_authenticated(request: Request) -> bool:
         if token == auth_secret:
             return True
 
-    # 2. Custom header
+    # 2. Custom header (x-auth-token)
     if request.headers.get("x-auth-token", "").strip() == auth_secret:
         return True
 
-    # 3. Query param (for testing or direct browser links)
+    # 3. Query parameter for direct browser links or testing
     q_token = request.query_params.get("token") or request.query_params.get("auth") or request.query_params.get("password")
     if q_token and q_token.strip() == auth_secret:
         return True
 
-    # 4. Cookie
+    # 4. HTTP Cookie for browser dashboard sessions
     if request.cookies.get("web_ui_token", "").strip() == auth_secret:
         return True
 
     return False
 
+
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
+    """
+    Intercepts incoming HTTP requests to enforce authentication when WEB_UI_PASSWORD is set.
+    လုံခြုံရေးစနစ် ဖွင့်ထားပါက ခွင့်ပြုချက်မရှိသော Request များကို ပိတ်ပင်ပေးသည်။
+    """
     auth_secret = os.getenv("WEB_UI_PASSWORD") or os.getenv("WEB_UI_TOKEN")
     if auth_secret:
         path = request.url.path
@@ -115,28 +162,51 @@ button:hover{background:#2ea043;}
             )
 
     response = await call_next(request)
+    # Automatically persist valid session cookie for browser visits
     if auth_secret and _is_authenticated(request):
         q_token = request.query_params.get("token") or request.query_params.get("auth") or request.query_params.get("password")
         if q_token and q_token.strip() == auth_secret:
             response.set_cookie("web_ui_token", auth_secret, max_age=86400 * 7, httponly=True, samesite="lax")
     return response
 
+
+# Jinja2 template renderer for the web dashboard HTML
 templates = Jinja2Templates(directory="templates")
 
 VIDEO_EXTENSIONS = ('.mp4', '.mkv', '.avi', '.mov', '.webm', '.flv', '.m4v')
 
-jobs = {}
-jobs_lock = threading.RLock()
-cancel_events = {}
-JOB_RETENTION_SECONDS = 7200  # Clean up finished jobs after 2 hours
 
-# FIFO Job Queue
-job_queue = []
+# =============================================================================
+# SECTION 3: SHARED STATE, THREAD SYNCHRONIZATION & QUEUE DISPATCHER
+# (မျှဝေသုံး Memory၊ Thread အချင်းချင်း ထိန်းချုပ်မှုနှင့် တန်းစီစနစ် Dispatcher)
+# =============================================================================
+
+# In-memory dictionary tracking job state: {job_id: {status, phase, buffer, created_at, ...}}
+jobs: Dict[str, Dict[str, Any]] = {}
+jobs_lock = threading.RLock()
+
+# Cancellation signal events: {job_id: threading.Event}
+cancel_events: Dict[str, threading.Event] = {}
+
+# Time-to-live retention for completed/failed/cancelled jobs in memory (2 hours)
+JOB_RETENTION_SECONDS: int = 7200
+
+# Sequential FIFO Job Queue
+job_queue: List[Dict[str, Any]] = []
 queue_lock = threading.RLock()
-_dispatcher_thread = None
+_dispatcher_thread: Optional[threading.Thread] = None
 
 def _queue_dispatcher():
-    """Background worker that pulls jobs from FIFO queue sequentially."""
+    """
+    Background worker that continuously pulls jobs from the sequential FIFO queue.
+    နောက်ကွယ်တွင် အမြဲ စောင့်ကြည့်နေပြီး လက်ရှိအလုပ် ပြီးသည်နှင့် နောက်တစ်ခုကို ချက်ချင်း စတင်ပေးသည်။
+    
+    Logic:
+      1. Checks if any job currently has status == 'running'.
+      2. If no jobs are active, pops the oldest job from `job_queue`.
+      3. Sets job status to 'running' in memory and SQLite database.
+      4. Spawns target worker thread asynchronously.
+    """
     while True:
         job_to_run = None
         with jobs_lock:
@@ -169,18 +239,31 @@ def _queue_dispatcher():
                 t.start()
         time.sleep(1.0)
 
+
 def _ensure_queue_dispatcher():
+    """
+    Ensures the background FIFO queue dispatcher thread is running.
+    တန်းစီစနစ် Dispatcher thread လည်ပတ်နေစေရန် စစ်ဆေးစတင်ပေးသည်။
+    """
     global _dispatcher_thread
     with queue_lock:
         if _dispatcher_thread is None or not _dispatcher_thread.is_alive():
             _dispatcher_thread = threading.Thread(target=_queue_dispatcher, daemon=True)
             _dispatcher_thread.start()
 
+
 # Launch queue dispatcher on module load
 _ensure_queue_dispatcher()
 
+
 def _cleanup_old_jobs():
-    """Remove completed/error jobs older than JOB_RETENTION_SECONDS to prevent memory growth."""
+    """
+    Purges completed, errored, or cancelled jobs older than JOB_RETENTION_SECONDS.
+    Also clears associated stdout buffers and SSE subscriber queues to prevent memory leaks.
+    
+    ပြီးစီး/ရပ်တန့်/မှားယွင်းသွားသော အလုပ်ဟောင်းများကို Memory ရှင်းလင်းပေးပြီး
+    Log buffers နှင့် SSE queues များကိုပါ ဖယ်ရှားပေးသည်။
+    """
     now = time.time()
     with jobs_lock:
         to_delete = [
@@ -190,19 +273,32 @@ def _cleanup_old_jobs():
         ]
         for jid in to_delete:
             jobs.pop(jid, None)
-            # BUG-C6 Fix: Also free thread_stdout buffers and subscribers to prevent memory leak
+            # Free thread_stdout buffers and subscribers to prevent memory leak
             t_out = globals().get('thread_stdout')
             if t_out and hasattr(t_out, 'buffers'):
                 t_out.buffers.pop(jid, None)
             if t_out and hasattr(t_out, 'subscribers'):
                 t_out.subscribers.pop(jid, None)
 
-def _has_running_job():
+
+def _has_running_job() -> bool:
+    """
+    Returns True if any video generation job is currently executing.
+    လက်ရှိ လုပ်ဆောင်ဆဲ အလုပ် ရှိ/မရှိ စစ်ဆေးပေးသည်။
+    """
     with jobs_lock:
         return any(job.get('status') == 'running' for job in jobs.values())
 
+
 def _resolve_input_source(input_source: str) -> str:
-    """Resolve a dashboard filename to movies/ while still allowing valid local paths."""
+    """
+    Resolves input filename or URL to a canonical local filesystem path or validated URL.
+    - If URL: returns as-is.
+    - If relative filename: checks inside `movies/` directory.
+    - If absolute path: verifies file existence.
+    
+    ဗီဒီယိုဖိုင် အမည် သို့မဟုတ် URL အား စစ်ဆေးပြီး တိကျသော File Path ကို ရှာဖွေပေးသည်။
+    """
     source = str(input_source or '').strip()
     if not source:
         raise ValueError("No input provided")
@@ -216,7 +312,14 @@ def _resolve_input_source(input_source: str) -> str:
             return os.path.abspath(movies_path)
     raise FileNotFoundError(f"File not found: '{source}'")
 
-def _safe_child_path(folder_type: str, item_name: str):
+
+def _safe_child_path(folder_type: str, item_name: str) -> Optional[str]:
+    """
+    Security check against Path Traversal attacks (e.g., '../../secret_file').
+    Ensures candidate path is strictly within the designated parent folder ('outputs', 'movies', 'temp').
+    
+    Path Traversal တိုက်ခိုက်မှုများ မဖြစ်စေရန် ရွေးချယ်ထားသော ဖိုဒါအတွင်း၌သာ ရှိမရှိ စစ်ဆေးပေးသည်။
+    """
     if folder_type not in {'outputs', 'movies', 'temp'} or not item_name:
         return None
     base = os.path.abspath(folder_type)
@@ -227,19 +330,34 @@ def _safe_child_path(folder_type: str, item_name: str):
         return None
 
 
-# Use contextvars to propagate Job ID across thread pools automatically (Python 3.7+)
+# =============================================================================
+# SECTION 4: REALTIME STDOUT CAPTURE & CONTEXT PROPAGATION
+# (Console Output ဖမ်းယူမှုနှင့် SSE Real-Time Streaming)
+# =============================================================================
+
+# ContextVar for thread-local job identification across worker thread pools (Python 3.7+)
 current_job_id = contextvars.ContextVar("current_job_id", default=None)
 
+
 class ThreadedStdout:
+    """
+    Custom multiplexing stdout stream that routes console logs simultaneously to:
+      1. Original system stdout / console
+      2. Per-job in-memory StringIO buffer (for later download/inspection)
+      3. Connected SSE subscribers (for zero-latency browser terminal feeds)
+      
+    Console တွင် ပေါ်သည့် စာသားများကို Web UI အချိန်နှင့်တပြေးညီ မြင်တွေ့နိုင်ရန်
+    StringIO buffer နှင့် SSE browser queues များဆီသို့ တစ်ပြိုင်နက် ပို့ဆောင်ပေးသည်။
+    """
     def __init__(self, original_stdout):
         self.original_stdout = original_stdout
-        self.buffers = {}
-        self.subscribers = {}
+        self.buffers: Dict[str, io.StringIO] = {}
+        self.subscribers: Dict[str, list] = {}
 
-    def write(self, s):
+    def write(self, s: str):
         jid = current_job_id.get()
         if not jid and self.buffers:
-            # Fallback: associate with active job buffer if current_job_id wasn't inherited
+            # Fallback: associate with active job buffer if context was not inherited
             if len(self.buffers) == 1:
                 jid = next(iter(self.buffers.keys()))
             else:
@@ -288,15 +406,24 @@ class ThreadedStdout:
     def __getattr__(self, name):
         return getattr(self.original_stdout, name)
 
+
+# Ensure UTF-8 console output encoding on Windows
 if sys.platform == "win32":
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
+# Intercept global sys.stdout and sys.stderr
 thread_stdout = ThreadedStdout(sys.stdout)
 sys.stdout = thread_stdout
 sys.stderr = thread_stdout
+
+
+# =============================================================================
+# SECTION 5: PIPELINE WORKER ENGINES
+# (အဓိက ဗီဒီယို ထုတ်လုပ်မှု Worker များ - Recap, Subtitles, Hardsub, Batch)
+# =============================================================================
 
 def pipeline_worker(
     job_id,
@@ -333,6 +460,19 @@ def pipeline_worker(
     render_video=True,
     stage_toggles=None,
 ):
+    """
+    Executes the Complete Movie Recap Pipeline via MasterAgent.
+    ဇာတ်ကား အကျဉ်းချုပ် ဗီဒီယို အပြည့်အစုံကို MasterAgent ဖြင့် စတင်ထုတ်လုပ်ပေးသည့် Worker ဖြစ်ပါသည်။
+    
+    Pipeline Stages:
+      1. Video & Audio Ingestion (YouTube URL auto-download or local file)
+      2. Vocal Separation & Demucs Isolation
+      3. Whisper Speech-to-Text Dialogue Extraction
+      4. Gemini Vision Scene & Storyline Analysis
+      5. Multi-lingual Script Synthesis (Burmese/English/Thai)
+      6. AI Voiceover Narration (Edge-TTS / F5-TTS)
+      7. Anti-Copyright Hardsubbing & Video Compositing
+    """
     current_job_id.set(job_id)
     cancel_events[job_id] = threading.Event()
     os.environ["CURRENT_JOB_CANCELLED"] = "0"
@@ -511,6 +651,16 @@ def subtitle_worker(
     audio_anti_copyright=False,
     stage_toggles=None,
 ):
+    """
+    Executes the Subtitle Generation & Translation Engine.
+    စာတန်းထိုး သီးသန့် ထုတ်လုပ်ခြင်းနှင့် ဘာသာပြန်ဆိုခြင်း လုပ်ငန်းများကို ဆောင်ရွက်ပေးသည့် Worker ဖြစ်ပါသည်။
+    
+    Capabilities:
+      - Speech-to-Text transcription via OpenAI Whisper
+      - Nuanced multilingual translation via Gemini AI
+      - SRT, ASS subtitle export and optional hardsub rendering
+      - Anti-copyright filters (mirror, blur, color grading)
+    """
     current_job_id.set(job_id)
     cancel_events[job_id] = threading.Event()
     os.environ["CURRENT_JOB_CANCELLED"] = "0"
@@ -616,6 +766,17 @@ def hardsub_worker(
     render_video=True,
     stage_toggles=None,
 ):
+    """
+    Executes the Anti-Copyright Hardsub Video Compositing Engine.
+    မူပိုင်ခွင့် အကာအကွယ် စစ်ထုတ်မှုများနှင့် စာတန်းထိုး ဗီဒီယို ပေါင်းစပ် ထုတ်လုပ်ပေးသည့် Worker ဖြစ်ပါသည်။
+    
+    Features:
+      - Persona-level spoken dialogue translation
+      - AI Subtitle Boxblur detection (Y-axis region masking)
+      - Video zoom (1.02x), EQ color grading, mirroring
+      - Audio anti-copyright frequency tempo shield (atempo=1.008)
+      - Hardware-accelerated H.264 video encoding (Intel QSV, NVENC, Apple VideoToolbox, libx264)
+    """
     current_job_id.set(job_id)
     cancel_events[job_id] = threading.Event()
     os.environ["CURRENT_JOB_CANCELLED"] = "0"
@@ -735,6 +896,15 @@ def batch_worker(
     render_video=True,
     stage_toggles=None,
 ):
+    """
+    Executes Multi-Video Batch Processing across any of the 3 production engines.
+    ဗီဒီယို အများအပြားကို တစ်ပြိုင်နက် သို့မဟုတ် အစဉ်လိုက် အလိုအလျောက် ထုတ်လုပ်ပေးသည့် Batch Worker ဖြစ်ပါသည်။
+    
+    Supported Engine Modes:
+      - 'recap': Full movie recap workflow via BatchProcessor
+      - 'subtitle': Whisper transcription and translation batch
+      - 'hardsub': Anti-copyright subtitle compositing batch
+    """
     from brain.planner import BatchProcessor
     current_job_id.set(job_id)
     cancel_events[job_id] = threading.Event()
@@ -945,8 +1115,16 @@ def batch_worker(
         if hasattr(thread_stdout, 'buffers'):
             thread_stdout.buffers.pop(job_id, None)
 
-# ── Pydantic Request Models ──
+# =============================================================================
+# SECTION 6: PYDANTIC DATA SCHEMAS & REQUEST MODELS
+# (API ဆိုင်ရာ Data Validation နှင့် Request Model များ)
+# =============================================================================
+
 class StartRequest(BaseModel):
+    """
+    Schema for initiating a single video production pipeline job.
+    ဗီဒီယို တစ်ခုချင်းစီ ထုတ်လုပ်ရန် API သို့ ပေးပို့ရမည့် အချက်အလက်များ ပုံစံခွက်။
+    """
     input: str
     engine_mode: Optional[str] = "recap"
     project_name: Optional[str] = None
@@ -984,7 +1162,12 @@ class StartRequest(BaseModel):
     render_video: Optional[bool] = True
     stage_toggles: Optional[Dict[str, bool]] = None
 
+
 class BatchStartRequest(BaseModel):
+    """
+    Schema for initiating multi-video batch execution.
+    ဗီဒီယို အများအပြားကို အလိုအလျောက် ဆက်တိုက် ထုတ်လုပ်ရန် ပေးပို့ရမည့် ပုံစံခွက်။
+    """
     inputs: List[str]
     engine_mode: Optional[str] = "recap"
     force_whisper: Optional[bool] = False
@@ -1018,28 +1201,45 @@ class BatchStartRequest(BaseModel):
     render_video: Optional[bool] = True
     stage_toggles: Optional[Dict[str, bool]] = None
 
+
 class SubtitleConfigRequest(BaseModel):
+    """Schema for updating default subtitle style presets."""
     preset: str = "box_black"
 
+
 class BrandingConfigRequest(BaseModel):
+    """Schema for updating watermark overlay parameters."""
     watermark_enabled: bool = True
     watermark_text: str = "Pai Ai Movie Studio"
     watermark_opacity: float = 0.4
     watermark_margin: int = 30
     watermark_font_size: int = 40
 
+
 class RenameRequest(BaseModel):
+    """Schema for renaming movie projects in storage."""
     old_name: str
     new_name: str
 
+
 class SaveKeysRequest(BaseModel):
+    """Schema for updating and reconciling Gemini API keys."""
     keys: List[str]
 
+
 class CookieSaveRequest(BaseModel):
+    """Schema for uploading Netscape format cookies text."""
     content: str
+
+
+# =============================================================================
+# SECTION 7: DASHBOARD & SYSTEM DIAGNOSTICS ENDPOINTS
+# (Web Dashboard နှင့် စနစ်ကျန်းမာရေး စစ်ဆေးမှု API များ)
+# =============================================================================
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
+    """Renders the single-page application (SPA) dashboard."""
     return templates.TemplateResponse(request=request, name="index.html")
 
 @app.get("/api/system/info")
@@ -1195,7 +1395,18 @@ def get_active_job():
                 }
     return {"job_id": None, "status": "idle"}
 
-def _get_cookie_paths():
+# =============================================================================
+# SECTION 8: YOUTUBE ANTI-BOT COOKIES & CREDENTIALS
+# (YouTube ဒေါင်းလုဒ်အတွက် Bot အကာအကွယ်ကျော်လွှားမည့် Cookies စီမံခန့်ခွဲမှု)
+# =============================================================================
+
+def _get_cookie_paths() -> List[str]:
+    """
+    Returns candidate file paths where cookies.txt may reside across platforms
+    (Local PC, Assets, Kaggle, Google Colab, and Google Drive).
+    
+    ပလက်ဖောင်း အမျိုးမျိုးတွင် ရှိနိုင်သော cookies.txt တည်နေရာများကို စုစည်းပေးသည်။
+    """
     return [
         "cookies.txt",
         os.path.join("assets", "cookies.txt"),
@@ -1205,9 +1416,14 @@ def _get_cookie_paths():
         "/content/drive/MyDrive/MovieRecapOutputs/cookies.txt"
     ]
 
-def _save_cookie_content(content_bytes: bytes):
+
+def _save_cookie_content(content_bytes: bytes) -> List[str]:
+    """
+    Synchronizes Netscape cookie bytes across all relevant runtime directories.
+    ပေးပို့လာသော Cookies ဒေတာများကို ပလက်ဖောင်းအလိုက် လိုအပ်သော ဖိုဒါများထဲသို့ သိမ်းဆည်းပေးသည်။
+    """
     saved_paths = []
-    # 1. Local and assets/
+    # 1. Local and assets/ directory
     for p in ["cookies.txt", os.path.join("assets", "cookies.txt")]:
         try:
             os.makedirs(os.path.dirname(os.path.abspath(p)), exist_ok=True)
@@ -1216,7 +1432,7 @@ def _save_cookie_content(content_bytes: bytes):
             saved_paths.append(p)
         except Exception:
             pass
-    # 2. Google Drive for Colab
+    # 2. Google Drive for Colab persistent storage
     drive_out = "/content/drive/MyDrive/MovieRecapOutputs"
     if os.path.exists(drive_out):
         try:
@@ -1237,8 +1453,13 @@ def _save_cookie_content(content_bytes: bytes):
                 pass
     return saved_paths
 
+
 @app.get("/api/cookies/status")
 def get_cookies_status():
+    """
+    Checks if cookies.txt is installed, validates format, file size, and YouTube domain presence.
+    လက်ရှိ စနစ်တွင် YouTube cookies တပ်ဆင်ထားခြင်း ရှိ/မရှိ စစ်ဆေးပေးသည်။
+    """
     candidates = _get_cookie_paths()
     import glob
     for k_match in glob.glob('/kaggle/input/**/cookies*.txt', recursive=True):
@@ -1274,8 +1495,13 @@ def get_cookies_status():
         "last_modified": mtime
     }
 
+
 @app.post("/api/cookies/save")
 def save_cookies_text(req: CookieSaveRequest):
+    """
+    Saves raw Netscape cookies text sent from dashboard UI.
+    Web UI မှ တိုက်ရိုက် ရေးသွင်းလိုက်သော Cookies စာသားများကို ဖိုင်အဖြစ် သိမ်းဆည်းပေးသည်။
+    """
     content = (req.content or "").strip()
     if not content:
         raise HTTPException(status_code=400, detail="Cookies content is empty")
@@ -1288,8 +1514,13 @@ def save_cookies_text(req: CookieSaveRequest):
         "bytes": len(content_bytes)
     }
 
+
 @app.delete("/api/cookies")
 def delete_cookies():
+    """
+    Removes cookies.txt from all known runtime paths.
+    သိမ်းဆည်းထားသော Cookies ဖိုင်များကို စနစ်တစ်ခုလုံးမှ ပယ်ဖျက်ရှင်းလင်းသည်။
+    """
     deleted = []
     for c in _get_cookie_paths():
         if os.path.exists(c):
@@ -1299,6 +1530,12 @@ def delete_cookies():
             except Exception:
                 pass
     return {"success": True, "deleted": deleted}
+
+
+# =============================================================================
+# SECTION 9: PIPELINE EXECUTION CONTROLLERS (UPLOAD, START & BATCH)
+# (ဗီဒီယို ဖိုင်တင်ခြင်း၊ တစ်ခုချင်းစတင်ခြင်းနှင့် Batch ထုတ်လုပ်ခြင်း API များ)
+# =============================================================================
 
 @app.post("/api/upload")
 async def upload_file(video: UploadFile = File(...)):
@@ -1612,9 +1849,17 @@ async def start_batch_pipeline(req: BatchStartRequest):
             pos = len(job_queue)
             return {"job_id": job_id, "status": "queued", "position": pos, "message": f"Batch job queued at position #{pos}"}
 
+# =============================================================================
+# SECTION 10: SEQUENTIAL FIFO QUEUE MANAGEMENT ENDPOINTS
+# (တန်းစီစနစ် ကြည့်ရှုခြင်းနှင့် တန်းစီစာရင်းမှ ပယ်ဖျက်ခြင်း API များ)
+# =============================================================================
+
 @app.get("/api/queue")
 def get_job_queue():
-    """Returns list of currently queued jobs and positions."""
+    """
+    Returns list of currently queued jobs, positions, and active job snapshot.
+    တန်းစီနေသော အလုပ်များစာရင်း၊ အလှည့်နံပါတ်နှင့် လက်ရှိအလုပ် အခြေအနေကို ပြသပေးသည်။
+    """
     with queue_lock:
         items = []
         for idx, item in enumerate(job_queue):
@@ -1637,9 +1882,13 @@ def get_job_queue():
         "active_job": active_info if active_info and active_info.get("job_id") else None
     }
 
+
 @app.delete("/api/queue/{job_id}")
 def delete_from_queue(job_id: str):
-    """Cancels and removes a pending job from the FIFO queue."""
+    """
+    Cancels and removes a pending job from the FIFO queue.
+    တန်းစီစာရင်းထဲမှ သတ်မှတ်ထားသော အလုပ်အား ဖယ်ရှားပယ်ဖျက်ပေးသည်။
+    """
     removed = False
     with queue_lock:
         for idx, item in enumerate(list(job_queue)):
@@ -1659,11 +1908,23 @@ def delete_from_queue(job_id: str):
         return {"success": True, "message": f"Job {job_id} removed from queue."}
     raise HTTPException(status_code=404, detail="Job not found in queue")
 
+
+# =============================================================================
+# SECTION 11: PIPELINE STOP & CANCELLATION CONTROLLERS
+# (ဗီဒီယို ထုတ်လုပ်မှုကို ရပ်တန့်ခြင်းနှင့် Process သတ်ပစ်ခြင်း API များ)
+# =============================================================================
+
 @app.post("/api/stop")
 @app.post("/api/cancel")
 @app.post("/api/cancel/{job_id}")
 async def stop_pipeline(job_id: Optional[str] = None):
-    """Force-stop any currently running single or batch pipeline job."""
+    """
+    Force-stops any currently running single or batch pipeline job, terminates
+    associated ffmpeg/demucs/yt-dlp child processes, and drains the queue.
+    
+    လုပ်ဆောင်ဆဲ သို့မဟုတ် တန်းစီနေသော အလုပ်များကို ချက်ချင်း ရပ်တန့်စေပြီး
+    နောက်ကွယ် Process များကို သတ်ပစ်သည်။
+    """
     stopped_count = 0
     os.environ["CURRENT_JOB_CANCELLED"] = "1"
     
@@ -1714,16 +1975,25 @@ async def stop_pipeline(job_id: Optional[str] = None):
 
     return {"success": True, "stopped_count": stopped_count, "message": "Pipeline force-stopped successfully."}
 
+
+# =============================================================================
+# SECTION 12: BRANDING & SUBTITLE CONFIGURATION ENDPOINTS
+# (Watermark တံဆိပ်နှင့် စာတန်းထိုး Style Setting API များ)
+# =============================================================================
+
 @app.get("/api/config/branding")
 async def get_branding_config():
+    """Returns current watermark overlay and intro title card settings."""
     c = cfg.load_config()
     return {
         "watermark": c.get("watermark", {}),
         "thumbnail_intro": c.get("thumbnail_intro", {"enabled": False, "duration_sec": 3.0}),
     }
 
+
 @app.post("/api/config/branding")
 async def save_branding_config(req: BrandingConfigRequest):
+    """Saves customized branding parameters to config.json."""
     c = cfg.load_config()
     if "watermark" not in c:
         c["watermark"] = {}
@@ -1734,6 +2004,7 @@ async def save_branding_config(req: BrandingConfigRequest):
     c["watermark"]["font_size"] = req.watermark_font_size
     cfg.save_config(c)
     return {"status": "ok", "watermark": c["watermark"]}
+
 
 @app.get("/api/config/subtitles")
 async def get_subtitle_config():
@@ -1758,9 +2029,18 @@ async def save_subtitle_config(req: SubtitleConfigRequest):
     cfg.save_config(c)
     return {"status": "ok", "preset": req.preset}
 
+# =============================================================================
+# SECTION 13: REALTIME SSE LOG STREAMING ENDPOINT
+# (Console Output များကို Zero-Latency ဖြင့် Real-Time ပို့ဆောင်ပေးသော SSE စနစ်)
+# =============================================================================
+
 @app.get("/api/stream/{job_id}")
 async def stream_job_logs(job_id: str, request: Request):
-    """Server-Sent Events (SSE) stream for zero-latency live logs and progress updates."""
+    """
+    Server-Sent Events (SSE) stream for zero-latency live logs and progress updates.
+    Console terminal တွင် ပေါ်သမျှ logs များကို Web Browser UI ဆီသို့ အချိန်နှင့်တပြေးညီ
+    တိုက်ရိုက် ပို့ဆောင်ပေးသည့် SSE Endpoint ဖြစ်ပါသည်။
+    """
     with jobs_lock:
         if job_id not in jobs:
             raise HTTPException(status_code=404, detail="Job not found")
@@ -1869,16 +2149,28 @@ async def stream_job_logs(job_id: str, request: Request):
         }
     )
 
+
+# =============================================================================
+# SECTION 14: JOB STATUS & PROGRESS MONITORING ENDPOINTS
+# (လက်ရှိ အလုပ်အခြေအနေနှင့် ရာခိုင်နှုန်း စစ်ဆေးမှု API များ)
+# =============================================================================
+
 @app.get("/api/status")
 async def latest_status_endpoint():
+    """Returns the latest active or most recent job's status."""
     with jobs_lock:
         if not jobs:
             return {"status": "idle", "phase": "Idle", "progress": 0, "job_id": None, "log": []}
         latest_id = list(jobs.keys())[-1]
     return await status_endpoint(latest_id)
 
+
 @app.get("/api/status/{job_id}")
 async def status_endpoint(job_id: str):
+    """
+    Returns granular status, phase breakdown, percentage, and timing metrics for a job ID.
+    Job ID အလိုက် လက်ရှိ ပြီးစီးမှု ရာခိုင်နှုန်း၊ အဆင့်နှင့် အချိန်များကို တွက်ချက်ပေးသည်။
+    """
     with jobs_lock:
         if job_id not in jobs:
             raise HTTPException(status_code=404, detail="Job not found")
@@ -1918,8 +2210,8 @@ async def status_endpoint(job_id: str):
 
         # Extract live phase completion durations
         for line in lines:
-            if '[⏱️ TIMING]' in line:
-                tm = re.search(r'\[⏱️ TIMING\] (Phase [^f]+) finished in ([\d\.]+)s', line)
+            if 'TIMING]' in line:
+                tm = re.search(r'\[(?:⏱️\s*)?TIMING\] (Phase [^f]+) finished in ([\d\.]+)s', line)
                 if tm:
                     phase_timings[tm.group(1).strip()] = float(tm.group(2))
 
@@ -1927,7 +2219,6 @@ async def status_endpoint(job_id: str):
     elapsed_sec = round(time.time() - created_at, 1) if created_at else None
 
     # Compute progress integer (0-100) from phase name for frontend progress bar
-
     progress_map = {
         "Step 1": 15, "Step 2": 35, "Step 3": 50, "Step 4": 65,
         "Step 5": 85, "Step 6": 95, "Step 7": 98,
@@ -1958,6 +2249,11 @@ async def status_endpoint(job_id: str):
         "error": job.get("error"),
     }
 
+
+# =============================================================================
+# SECTION 15: MEDIA OUTPUTS & FILE MANAGEMENT ENDPOINTS
+# (ထုတ်လုပ်ပြီး ဗီဒီယို ဖိုင်များ၊ စာတန်းထိုးနှင့် ZIP ဒေါင်းလုဒ် API များ)
+# =============================================================================
 
 @app.get("/api/outputs")
 def list_outputs():
@@ -2098,16 +2394,30 @@ def download_project_zip(movie: str = Query("")):
         background=BackgroundTask(_cleanup_temp_zip, zip_path)
     )
 
+# =============================================================================
+# SECTION 16: MOVIE STORAGE, CACHE CLEANUP & SYSTEM CONFIG
+# (မူရင်း ဗီဒီယိုစာရင်း၊ Cache ဖျက်သိမ်းခြင်းနှင့် စနစ် Setting API များ)
+# =============================================================================
+
 @app.get("/api/movies")
 def list_movies():
+    """
+    Returns list of recognized video files available inside the 'movies/' directory.
+    'movies/' ဖိုဒါအတွင်းရှိ ထုတ်လုပ်နိုင်သော ဗီဒီယိုဖိုင်များ စာရင်းကို ထုတ်ပေးသည်။
+    """
     movies_dir = "movies"
     if not os.path.exists(movies_dir):
         return []
     files = [f for f in os.listdir(movies_dir) if f.lower().endswith(VIDEO_EXTENSIONS)]
     return sorted(files)
 
+
 @app.delete("/api/delete/cache")
 async def clear_cache():
+    """
+    Deletes temporary workspace cache files, orphaned MoviePy clips, and Python bytecode.
+    စနစ် နှေးကွေးမသွားစေရန် ယာယီ temp ဖိုင်များနှင့် cache များကို ရှင်းထုတ်ပေးသည်။
+    """
     cleared = 0
     for d in ["temp", "voiceover"]:
         if os.path.exists(d):
@@ -2143,8 +2453,13 @@ async def clear_cache():
 
     return {"success": True, "cleared_items": cleared}
 
+
 @app.api_route("/api/config", methods=["GET", "POST"])
 async def handle_config(request: Request):
+    """
+    Retrieves or updates global pipeline configuration settings without exposing raw Gemini keys.
+    စနစ်တစ်ခုလုံး၏ Setting များကို ကြည့်ရှု/ပြင်ဆင်ပေးပြီး API Keys များကို ဖုံးကွယ်ပေးထားသည်။
+    """
     import brain.config as cfg
     config_data = cfg.load_config()
     if request.method == 'POST':
@@ -2197,6 +2512,12 @@ async def handle_config(request: Request):
         public_config = json.loads(json.dumps(config_data))
         public_config.get("gemini", {}).pop("api_keys", None)
         return public_config
+
+
+# =============================================================================
+# SECTION 17: GEMINI API KEY MANAGEMENT & SECURITY
+# (Gemini API Key လုံခြုံရေး၊ Mask ပြုလုပ်ခြင်းနှင့် စစ်ဆေးခြင်း API များ)
+# =============================================================================
 
 @app.get("/api/keys/status")
 def get_key_status():
@@ -2456,8 +2777,20 @@ def save_keys(req: SaveKeysRequest):
         print(f"[ERROR] Failed to save API keys: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# =============================================================================
+# SECTION 18: SUBTITLE PREVIEW & VISUAL AUDIT ENDPOINTS
+# (စာတန်းထိုး Preview ကြည့်ရှုခြင်းနှင့် အရည်အသွေး စစ်ဆေးမှု API)
+# =============================================================================
+
 @app.get("/api/subtitle/preview/{movie_name:path}")
 def preview_subtitle_project(movie_name: str):
+    """
+    Returns SRT subtitle text, Burmese transcript, Quality Check (QC) report,
+    and structured dialogue records for the frontend interactive subtitle editor/previewer.
+    
+    စာတန်းထိုး ပြန်လည်စစ်ဆေးတည်းဖြတ်နိုင်ရန် SRT၊ Transcript၊ QC Report နှင့် Records များကို ထုတ်ပေးသည်။
+    """
     safe_name = os.path.normpath(movie_name).strip(" /\\.")
     outputs_dir = os.path.abspath("outputs")
     proj_dir = os.path.normpath(os.path.join(outputs_dir, safe_name))
@@ -2522,14 +2855,26 @@ def preview_subtitle_project(movie_name: str):
         "total_records": len(raw_records)
     }
 
+
+# =============================================================================
+# SECTION 19: SERVER ENTRYPOINT & CLI ARGUMENT PARSER
+# (Web Server စတင်နှိုးဆော်ခြင်းနှင့် Command-Line Option စီမံမှု)
+# =============================================================================
+
 if __name__ == '__main__':
-    import uvicorn, argparse
-    parser = argparse.ArgumentParser(description="AI Movie Recap Web UI Server")
-    parser.add_argument("--host", type=str, default=None, help="Host to bind to")
-    parser.add_argument("--port", type=int, default=None, help="Port to bind to")
+    import uvicorn
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Pai AI Movie Studio Web UI Server")
+    parser.add_argument("--host", type=str, default=None, help="Host address to bind the server to")
+    parser.add_argument("--port", type=int, default=None, help="Port number to listen on")
     args, _ = parser.parse_known_args()
 
-    default_host = "0.0.0.0" if ("COLAB_GPU" in os.environ or "KAGGLE_KERNEL_RUN_TYPE" in os.environ or "COLAB_RELEASE_TAG" in os.environ) else "127.0.0.1"
+    # Automatically detect cloud notebook environments (Google Colab, Kaggle)
+    is_cloud_env = ("COLAB_GPU" in os.environ or "KAGGLE_KERNEL_RUN_TYPE" in os.environ or "COLAB_RELEASE_TAG" in os.environ)
+    default_host = "0.0.0.0" if is_cloud_env else "127.0.0.1"
     host = args.host or os.getenv("HOST", default_host)
     port = args.port or int(os.getenv("PORT", 5000))
+
+    print(f"[*] Starting Pai AI Movie Studio Web Server on http://{host}:{port}")
     uvicorn.run(app, host=host, port=port, log_level='info')

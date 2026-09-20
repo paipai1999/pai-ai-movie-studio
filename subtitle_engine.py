@@ -1,15 +1,17 @@
 """
-YouTube to Burmese Subtitle & Transcript Engine
-================================================
-A dedicated, standalone AI engine that:
-1. Downloads a YouTube video (or accepts local video) -> 01_video_original.mp4
-2. Extracts original transcript with exact timestamps (YouTube subs or Faster-Whisper) -> 02_transcript_original.txt
-3. Detects source language (English, Chinese, Japanese, Korean, Thai, etc.)
-4. Translates original to English (if non-English) -> 03_transcript_english.txt
-5. Translates English to natural spoken Burmese -> 04_transcript_burmese.txt
-6. Produces standard SRT subtitle file preserving 100% original timestamps -> 05_subtitle_burmese.srt
-7. Generates comprehensive audit report -> 06_quality_check_report.txt
-8. Exports structured review table -> records_data.json
+Burmese Subtitle & Transcript Engine (မြန်မာစာတန်းထိုးနှင့် အသံဖမ်းယူမှု အင်ဂျင်)
+=============================================================================
+A dedicated, standalone AI engine providing:
+1. Video Ingestion & Download: Local MP4 or YouTube download -> 01_video_original.mp4
+2. Timed Speech-to-Text: Faster-Whisper with exact timestamps -> 02_transcript_original.txt
+3. Multilingual Source Detection: CJK, Thai, English auto-detection
+4. Faithful Burmese Translation: 1:1 Spoken Dialogue or Character Personas -> 04_transcript_burmese.txt
+5. Subtitle File Export: Standard SRT preserving 100% timestamps -> 05_subtitle_burmese.srt
+6. Quality Assurance Audit: Synchronization and completeness report -> 06_quality_check_report.txt
+7. Structured Records: Full aligned JSON dataset -> records_data.json
+
+ဤ engine သည် မူရင်းဗီဒီယိုမှ စကားပြောသံများကို အချိန်ကိုက် ဖမ်းယူပြီး
+သဘာဝကျကျ ၁:၁ စကားပြောဟန် မြန်မာစာတန်းထိုးအဖြစ် တိကျစွာ ပြန်ဆိုထုတ်လုပ်ပေးပါသည်။
 """
 
 import os
@@ -32,33 +34,17 @@ if PROJECT_ROOT not in sys.path:
 import brain.config as cfg
 from brain.gemini_client import call_gemini
 from brain.burmese_utils import sanitize_burmese_narration
+from core.subtitle_builder import (
+    format_srt_timestamp,
+    parse_srt_timestamp,
+    format_ass_timestamp,
+    build_srt_script,
+    build_ass_script,
+)
 
-
-def _format_srt_timestamp(seconds: float) -> str:
-    """Formats floating-point seconds into SRT timestamp HH:MM:SS,mmm."""
-    if seconds < 0:
-        seconds = 0.0
-    total_ms = int(round(seconds * 1000.0))
-    hours = total_ms // 3600000
-    remainder = total_ms % 3600000
-    minutes = remainder // 60000
-    remainder = remainder % 60000
-    secs = remainder // 1000
-    ms = remainder % 1000
-    return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
-
-
-def _parse_srt_timestamp(ts_str: str) -> float:
-    """Parses HH:MM:SS,mmm or HH:MM:SS.mmm into floating-point seconds."""
-    clean = ts_str.replace(",", ".").strip()
-    parts = clean.split(":")
-    if len(parts) == 3:
-        h, m, s = parts
-        return float(h) * 3600.0 + float(m) * 60.0 + float(s)
-    elif len(parts) == 2:
-        m, s = parts
-        return float(m) * 60.0 + float(s)
-    return float(clean)
+# Backward-compatible aliases for external tests and callers
+_format_srt_timestamp = format_srt_timestamp
+_parse_srt_timestamp = parse_srt_timestamp
 
 
 def _get_ffmpeg_bin() -> str:
@@ -141,7 +127,7 @@ class SubtitleEngine:
                 video_format = "16:9"
 
         print("\n" + "=" * 65)
-        print("🎬 [SUBTITLE ENGINE] YouTube Video to Burmese Subtitles & Transcripts")
+        print("[SUBTITLE ENGINE] YouTube Video to Burmese Subtitles & Transcripts")
         print(f"[*] Input: {input_source}")
         print(f"[*] Source Language: {source_language}")
         print(f"[*] Force Whisper STT: {force_whisper}")
@@ -303,9 +289,9 @@ class SubtitleEngine:
         elapsed = time.time() - start_time_all
         m, s = divmod(int(elapsed), 60)
         print("\n" + "=" * 65)
-        print(f"🎉 [COMPLETED] Subtitle & Transcript Generation finished in {m:02d}:{s:02d}!")
+        print(f"[COMPLETED] Subtitle & Transcript Generation finished in {m:02d}:{s:02d}!")
         print("=" * 65)
-        print("📦 DELIVERABLE OUTPUTS:")
+        print("DELIVERABLE OUTPUTS:")
         for k, v in output_files.items():
             print(f"   ├─ {os.path.basename(v):<28} ({v})")
         print("=" * 65 + "\n")

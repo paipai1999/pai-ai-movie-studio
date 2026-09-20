@@ -1,17 +1,17 @@
 """
-Original Audio & Burmese Hardsub Studio Engine (Engine 3)
-=========================================================
+Original Audio & Burmese Hardsub Studio Engine (မူရင်းအသံနှင့် မြန်မာ Hardsub အင်ဂျင်)
+====================================================================================
 A specialized, end-to-end cinematic movie translation & hardsub engine that:
-1. Retains 100% of the original audio track (voices, music, sound effects - zero TTS overwrite).
-2. Transcribes dialogue with exact timestamps (native subtitles or Faster-Whisper).
-3. Translates dialogue with 100% semantic fidelity and accurate gender/age personas
-   (Male: ကျနော်/ခင်ဗျာ, Female: ကျွန်မ/ရှင်, Child: သား/သမီး/ဖေဖေ/မေမေ).
-4. Blurs out original hardcoded subtitles using Vision AI region detection.
-5. Injects Anti-Copyright protection (subtle 1.02x zoom/crop, subtle color grade eq, optional mirror).
-6. Encodes/burns styled Myanmar ASS subtitles into the video (Hardsub).
-7. Supports selectable aspect ratios (16:9 Landscape, 9:16 Vertical Reels, Both)
-   and resolutions (1080p Full HD, 720p HD).
-8. Exports complete subtitle and audit report files (.srt, .txt, .json).
+1. Audio Preservation: Retains 100% of original audio (zero TTS overwrite).
+2. Timed Speech Recognition: Faster-Whisper transcription with exact timestamps.
+3. Gender/Age Persona Translation: Male, female, and kinship dubbing conventions.
+4. Vision AI Subtitle Blur: Masks preexisting hardcoded subtitles.
+5. Anti-Copyright Protections: 1.02x zoom/crop, subtle color grade EQ, mirror, audio tempo shield.
+6. Cinema Subtitle Compositing: Encodes high-contrast styled Myanmar ASS subtitles.
+7. Multi-Format Canvas: Supports 16:9 Landscape, 9:16 Vertical Reels, and Dual Export.
+
+ဤ engine သည် မူရင်း အသံနှင့် တေးဂီတ ၁၀၀% ကို မထိခိုက်စေဘဲ စာတန်းဟောင်းများကို Blur ပြုလုပ်ကာ
+မြန်မာစာတန်းထိုး အသစ်အား ဗီဒီယိုထဲသို့ အပြီးတိုင် ထည့်သွင်း (Hardsub) ထုတ်လုပ်ပေးပါသည်။
 """
 
 import os
@@ -48,52 +48,24 @@ from agents.video_merger_agent import (
     _get_ffmpeg_bin,
     _get_safe_ascii_id,
 )
+from core.subtitle_builder import (
+    format_srt_timestamp,
+    parse_srt_timestamp,
+    format_ass_timestamp,
+    build_ass_script,
+    build_srt_script,
+    SUBTITLE_STYLE_PRESETS,
+)
+from core.anti_copyright import (
+    build_video_anti_copyright_filters,
+    build_audio_anti_copyright_filters,
+)
+from core.video_blur import calculate_blur_box
 
-
-def _format_srt_timestamp(seconds: float) -> str:
-    """Formats floating-point seconds into SRT timestamp HH:MM:SS,mmm."""
-    if seconds < 0:
-        seconds = 0.0
-    total_ms = int(round(seconds * 1000.0))
-    hours = total_ms // 3600000
-    remainder = total_ms % 3600000
-    minutes = remainder // 60000
-    remainder = remainder % 60000
-    secs = remainder // 1000
-    ms = remainder % 1000
-    return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
-
-
-def _format_ass_timestamp(seconds: Union[float, int, str]) -> str:
-    """Formats floating-point seconds (or SRT string) into ASS timestamp H:MM:SS.cc."""
-    if isinstance(seconds, str):
-        try:
-            seconds = float(seconds)
-        except ValueError:
-            seconds = _parse_srt_timestamp(seconds)
-    if seconds < 0:
-        seconds = 0.0
-    total_cs = int(round(seconds * 100.0))
-    hours = total_cs // 360000
-    remainder = total_cs % 360000
-    minutes = remainder // 6000
-    remainder = remainder % 6000
-    secs = remainder // 100
-    cs = remainder % 100
-    return f"{hours}:{minutes:02d}:{secs:02d}.{cs:02d}"
-
-
-def _parse_srt_timestamp(ts_str: str) -> float:
-    """Parses HH:MM:SS,mmm or HH:MM:SS.mmm into floating-point seconds."""
-    clean = ts_str.replace(",", ".").strip()
-    parts = clean.split(":")
-    if len(parts) == 3:
-        h, m, s = parts
-        return float(h) * 3600.0 + float(m) * 60.0 + float(s)
-    elif len(parts) == 2:
-        m, s = parts
-        return float(m) * 60.0 + float(s)
-    return float(clean)
+# Backward-compatible aliases for external tests and callers
+_format_srt_timestamp = format_srt_timestamp
+_parse_srt_timestamp = parse_srt_timestamp
+_format_ass_timestamp = format_ass_timestamp
 
 
 class HardsubEngine:
@@ -118,7 +90,7 @@ class HardsubEngine:
 
     def _check_cancellation(self):
         if (self.cancel_event and getattr(self.cancel_event, "is_set", lambda: False)()) or os.environ.get("CURRENT_JOB_CANCELLED") == "1":
-            print("\n🛑 [STOP] HardsubEngine was force-stopped by user.")
+            print("\n[STOP] HardsubEngine was force-stopped by user.")
             raise InterruptedError("HardsubEngine execution cancelled by user.")
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -780,7 +752,7 @@ class HardsubEngine:
                 timeout=render_timeout,
             )
             if res.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
-                print(f"🚀 [OK] Hardsub video render COMPLETE -> {os.path.basename(output_path)}")
+                print(f"[OK] Hardsub video render COMPLETE -> {os.path.basename(output_path)}")
                 return True
             else:
                 print(f"[WARN] Hardware render failed (exit code {res.returncode}). Retrying with CPU libx264...")
@@ -820,7 +792,7 @@ class HardsubEngine:
                 timeout=render_timeout,
             )
             if res_cpu.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
-                print(f"🚀 [OK] Hardsub CPU render COMPLETE -> {os.path.basename(output_path)}")
+                print(f"[OK] Hardsub CPU render COMPLETE -> {os.path.basename(output_path)}")
                 return True
             else:
                 print(f"[ERROR] CPU render failed (exit code {res_cpu.returncode}).")
@@ -959,7 +931,7 @@ class HardsubEngine:
             if stage_toggles.get("reels") is False and video_format == "both":
                 video_format = "16:9"
 
-        print(f"\n🚀 HardsubEngine: Initializing '{clean_proj_name}'...")
+        print(f"\nHardsubEngine: Initializing '{clean_proj_name}'...")
         anti_note = " + Audio Shield (atempo=1.008)" if audio_anti_copyright else ""
         print(f"   Format: {video_format.upper()} | Res: {resolution.upper()} | Style: {subtitle_style} | Blur: {blur_mode} | Trans: {translation_style}{anti_note}")
 
@@ -1068,7 +1040,7 @@ class HardsubEngine:
         if not rendered_outputs:
             print("\n" + "=" * 65)
             print("❌ HardsubEngine FAILED: No videos could be rendered successfully.")
-            print(f"📁 Project Folder: {project_dir}")
+            print(f"Project Folder: {project_dir}")
             print("=" * 65 + "\n")
             return {
                 "status": "failed",
@@ -1080,10 +1052,10 @@ class HardsubEngine:
             }
 
         print("\n" + "=" * 65)
-        print(f"🎉 HardsubEngine COMPLETED in {elapsed:.1f}s!")
-        print(f"📁 Project Folder: {project_dir}")
+        print(f"HardsubEngine COMPLETED in {elapsed:.1f}s!")
+        print(f"Project Folder: {project_dir}")
         for fmt, p in rendered_outputs.items():
-            print(f"   🎬 {fmt.upper()} Video: {os.path.basename(p)}")
+            print(f"   {fmt.upper()} Video: {os.path.basename(p)}")
         print("=" * 65 + "\n")
 
         return {
