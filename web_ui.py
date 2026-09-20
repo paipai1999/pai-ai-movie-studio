@@ -42,7 +42,7 @@ from main import check_dependencies
 try:
     check_dependencies()
     _enc = detect_hardware_encoder()
-    print(f"🚀 [WebUI Hardware Acceleration] Active Video Encoder: {_enc.get('label', 'Default')} [{_enc.get('codec', 'libx264')}]")
+    print(f"[WebUI Hardware Acceleration] Active Video Encoder: {_enc.get('label', 'Default')} [{_enc.get('codec', 'libx264')}]")
 except Exception as e:
     print(f"[WARN] check_dependencies failed: {e}")
 
@@ -108,7 +108,7 @@ async def auth_middleware(request: Request, call_next):
 input{width:100%;box-sizing:border-box;padding:12px;margin:16px 0;background:#0d1117;border:1px solid #30363d;color:#fff;border-radius:6px;font-size:15px;}
 button{width:100%;padding:12px;background:#238636;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold;font-size:15px;}
 button:hover{background:#2ea043;}
-</style></head><body><div class='box'><h2>🔒 Login Required</h2><p style='color:#8b949e;font-size:14px;'>This Movie Recap Web UI is password-protected.</p>
+</style></head><body><div class='box'><h2>Login Required</h2><p style='color:#8b949e;font-size:14px;'>This Movie Recap Web UI is password-protected.</p>
 <form method='GET' action='/'><input type='password' name='token' placeholder='Enter Password / Token' required/><button type='submit'>Access Dashboard</button></form>
 </div></body></html>""",
                 status_code=401
@@ -466,7 +466,7 @@ def pipeline_worker(
         job_cancel_ev = cancel_events.get(job_id)
         is_cancel = isinstance(e, (InterruptedError, KeyboardInterrupt)) or (job_cancel_ev and job_cancel_ev.is_set()) or (os.environ.get("CURRENT_JOB_CANCELLED") == "1")
         if is_cancel:
-            print(f"\n🛑 [STOP] Job {job_id} was force-stopped by user.")
+            print(f"\n[STOP] Job {job_id} was force-stopped by user.")
             with jobs_lock:
                 jobs[job_id]['status'] = 'cancelled'
                 jobs[job_id]['phase'] = 'Stopped by user'
@@ -572,7 +572,7 @@ def subtitle_worker(
         job_cancel_ev = cancel_events.get(job_id)
         is_cancel = isinstance(e, (InterruptedError, KeyboardInterrupt)) or (job_cancel_ev and job_cancel_ev.is_set()) or (os.environ.get("CURRENT_JOB_CANCELLED") == "1")
         if is_cancel:
-            print(f"\n🛑 [STOP] Job {job_id} was force-stopped by user.")
+            print(f"\n[STOP] Job {job_id} was force-stopped by user.")
             with jobs_lock:
                 jobs[job_id]['status'] = 'cancelled'
                 jobs[job_id]['phase'] = 'Stopped by user'
@@ -677,7 +677,7 @@ def hardsub_worker(
         job_cancel_ev = cancel_events.get(job_id)
         is_cancel = isinstance(e, (InterruptedError, KeyboardInterrupt)) or (job_cancel_ev and job_cancel_ev.is_set()) or (os.environ.get("CURRENT_JOB_CANCELLED") == "1")
         if is_cancel:
-            print(f"\n🛑 [STOP] Hardsub job {job_id} was force-stopped by user.")
+            print(f"\n[STOP] Hardsub job {job_id} was force-stopped by user.")
             with jobs_lock:
                 jobs[job_id]['status'] = 'cancelled'
                 jobs[job_id]['phase'] = 'Stopped by user'
@@ -921,7 +921,7 @@ def batch_worker(
         job_cancel_ev = cancel_events.get(job_id)
         is_cancel = isinstance(e, (InterruptedError, KeyboardInterrupt)) or (job_cancel_ev and job_cancel_ev.is_set()) or (os.environ.get("CURRENT_JOB_CANCELLED") == "1")
         if is_cancel:
-            print(f"\n🛑 [STOP] Batch job {job_id} was force-stopped by user.")
+            print(f"\n[STOP] Batch job {job_id} was force-stopped by user.")
             with jobs_lock:
                 jobs[job_id]['status'] = 'cancelled'
                 jobs[job_id]['phase'] = 'Stopped by user'
@@ -1683,7 +1683,7 @@ async def stop_pipeline(job_id: Optional[str] = None):
                     update_job(jid, status="cancelled", phase="Stopped by user")
                 except Exception:
                     pass
-                print(f"\n🛑 [STOP] Force-stop signal received! Cancelled job {jid}.")
+                print(f"\n[STOP] Force-stop signal received! Cancelled job {jid}.")
 
     with queue_lock:
         if job_id:
