@@ -550,35 +550,69 @@ class VideoMergerAgent:
                 has_no_vocals = True
                 break
 
+        bgm_cfg = config_data.get("bgm", {})
+        bgm_folder = bgm_cfg.get("folder", "assets/bgm")
+        bgm_track = None
+        if os.path.exists(bgm_folder):
+            candidates = [f for f in os.listdir(bgm_folder) if f.endswith(('.wav', '.mp3'))]
+            for preferred in ["scifi_tension.wav", "dark_suspense.wav", "action_pulse.wav"]:
+                if preferred in candidates:
+                    bgm_track = os.path.join(bgm_folder, preferred)
+                    break
+            if not bgm_track and candidates:
+                bgm_track = os.path.join(bgm_folder, candidates[0])
+
+        user_sfx_mode = getattr(state, "sfx_mode", None) or "original_sfx"
+        if user_sfx_mode == "demucs":
+            user_sfx_mode = "original_sfx"
+
         bg_source_type = "none"
         bg_audio_file = None
+        bg_extra_file = None
 
-        if has_no_vocals and not getattr(state, "skip_demucs", False):
-            bg_source_type = "demucs"
-            bg_audio_file = os.path.abspath(no_vocals_path)
-            print("[*] VideoMerger: Found Demucs no_vocals.wav (SFX Only). Using as background audio.")
-        elif getattr(state, "skip_demucs", False) or not has_no_vocals:
-            print("[*] VideoMerger: Vocal separation bypassed / skip-demucs -> Muting original audio (zero English voice bleed).")
-            bgm_cfg = config_data.get("bgm", {})
-            bgm_folder = bgm_cfg.get("folder", "assets/bgm")
-            bgm_track = None
-            if os.path.exists(bgm_folder):
-                candidates = [f for f in os.listdir(bgm_folder) if f.endswith(('.wav', '.mp3'))]
-                for preferred in ["scifi_tension.wav", "dark_suspense.wav", "action_pulse.wav"]:
-                    if preferred in candidates:
-                        bgm_track = os.path.join(bgm_folder, preferred)
-                        break
-                if not bgm_track and candidates:
-                    bgm_track = os.path.join(bgm_folder, candidates[0])
-
+        if getattr(state, "audio_mode", None) == "original":
+            if _has_audio_stream(movie_path):
+                bg_source_type = "orig"
+                print("[*] VideoMerger: Audio Mode is 'original' (Preserving 100% original movie audio track).")
+            else:
+                bg_source_type = "none"
+        elif user_sfx_mode == "none":
+            bg_source_type = "none"
+            print("[*] VideoMerger: SFX Mode is 'none' (Pure voiceover without background audio).")
+        elif user_sfx_mode == "bgm":
             if bgm_track and os.path.exists(bgm_track):
+                bg_source_type = "bgm"
+                bg_audio_file = os.path.abspath(bgm_track)
+                print(f"[*] VideoMerger: SFX Mode is 'bgm' -> Adding cinematic BGM: {os.path.basename(bgm_track)}")
+            else:
+                bg_source_type = "none"
+                print("[*] VideoMerger: Cinematic BGM track not found in assets/bgm. Proceeding with clean voiceover.")
+        elif user_sfx_mode == "both":
+            if has_no_vocals and bgm_track and os.path.exists(bgm_track):
+                bg_source_type = "both"
+                bg_audio_file = os.path.abspath(no_vocals_path)
+                bg_extra_file = os.path.abspath(bgm_track)
+                print(f"[*] VideoMerger: SFX Mode is 'both' -> Merging Demucs SFX + Cinematic BGM ({os.path.basename(bgm_track)}).")
+            elif has_no_vocals:
+                bg_source_type = "demucs"
+                bg_audio_file = os.path.abspath(no_vocals_path)
+                print("[*] VideoMerger: Found Demucs SFX. Using as background audio.")
+            elif bgm_track and os.path.exists(bgm_track):
                 bg_source_type = "bgm"
                 bg_audio_file = os.path.abspath(bgm_track)
                 print(f"[*] VideoMerger: Adding cinematic BGM -> {os.path.basename(bgm_track)}")
             else:
                 bg_source_type = "none"
-        else:
-            if _has_audio_stream(movie_path):
+        else:  # default "original_sfx"
+            if has_no_vocals and not getattr(state, "skip_demucs", False):
+                bg_source_type = "demucs"
+                bg_audio_file = os.path.abspath(no_vocals_path)
+                print("[*] VideoMerger: Found Demucs no_vocals.wav (Original SFX). Using as background audio.")
+            elif bgm_track and os.path.exists(bgm_track):
+                bg_source_type = "bgm"
+                bg_audio_file = os.path.abspath(bgm_track)
+                print(f"[*] VideoMerger: Demucs SFX not available -> Fallback to cinematic BGM: {os.path.basename(bgm_track)}")
+            elif _has_audio_stream(movie_path) and not getattr(state, "skip_demucs", False):
                 bg_source_type = "orig"
             else:
                 bg_source_type = "none"
@@ -704,9 +738,14 @@ class VideoMergerAgent:
                 next_idx += 1
 
             bg_input_idx = None
-            if bg_source_type in ["demucs", "bgm"] and bg_audio_file and os.path.exists(bg_audio_file):
+            bg_extra_idx = None
+            if bg_source_type in ["demucs", "bgm", "both"] and bg_audio_file and os.path.exists(bg_audio_file):
                 sp_inputs.extend(["-i", os.path.abspath(bg_audio_file)])
                 bg_input_idx = next_idx
+                next_idx += 1
+            if bg_source_type == "both" and bg_extra_file and os.path.exists(bg_extra_file):
+                sp_inputs.extend(["-i", os.path.abspath(bg_extra_file)])
+                bg_extra_idx = next_idx
                 next_idx += 1
 
             wm_input_idx = None
@@ -728,12 +767,12 @@ class VideoMergerAgent:
                 ]
                 last_v = "[v_base]"
 
-                if copyright_enabled:
-                    mirror_enabled = copyright_cfg.get("mirror_video", False)
+                if copyright_enabled or getattr(state, "mirror", False):
+                    mirror_enabled = bool(getattr(state, "mirror", False) or copyright_cfg.get("mirror_video", False))
                     if mirror_enabled:
                         flt_parts.append(f"{last_v}hflip[v_flipped]")
                         last_v = "[v_flipped]"
-                    resize_factor = float(copyright_cfg.get("resize_factor", 1.02))
+                    resize_factor = float(copyright_cfg.get("resize_factor", 1.02)) if copyright_enabled else 1.0
                     if resize_factor != 1.0:
                         flt_parts.append(f"{last_v}scale=iw*{resize_factor}:ih*{resize_factor},crop=iw/{resize_factor}:ih/{resize_factor}[v_resized]")
                         last_v = "[v_resized]"
@@ -797,11 +836,20 @@ class VideoMergerAgent:
                 # Dynamic Audio Ducking & Compositing
                 duck_cfg = config_data.get("audio_ducking", {})
                 duck_enabled = duck_cfg.get("enabled", True)
-                ambient_vol = float(duck_cfg.get("ambient_volume", 0.35))
+                if getattr(state, "audio_mode", "ai_voiceover") == "original":
+                    default_vol = 1.0
+                else:
+                    default_vol = duck_cfg.get("ambient_volume", 0.35)
+                ambient_vol = float(getattr(state, "sfx_volume", None) or default_vol)
                 target_dur_str = f"{effective_video_dur:.2f}" if effective_video_dur > 0 else "600.00"
+                tempo_flt = ",atempo=1.008" if getattr(state, "audio_anti_copyright", False) else ""
 
                 if vo_input_idx is not None and (bg_input_idx is not None or bg_source_type == "orig"):
-                    if bg_source_type == "bgm":
+                    if bg_source_type == "both":
+                        flt_parts.append(f"[{bg_input_idx}:a]apad=whole_dur={target_dur_str},atrim=0:{target_dur_str},volume={ambient_vol:.2f}[sfx_pre]")
+                        flt_parts.append(f"[{bg_extra_idx}:a]aloop=loop=-1:size=2e+09,atrim=0:{target_dur_str},volume={ambient_vol * 0.8:.2f}[bgm_pre]")
+                        flt_parts.append(f"[sfx_pre][bgm_pre]amix=inputs=2:duration=first:dropout_transition=0[bg_raw]")
+                    elif bg_source_type == "bgm":
                         flt_parts.append(f"[{bg_input_idx}:a]aloop=loop=-1:size=2e+09,atrim=0:{target_dur_str},volume={ambient_vol:.2f}[bg_raw]")
                     elif bg_source_type == "demucs":
                         flt_parts.append(f"[{bg_input_idx}:a]apad=whole_dur={target_dur_str},atrim=0:{target_dur_str},volume={ambient_vol:.2f}[bg_raw]")
@@ -813,21 +861,25 @@ class VideoMergerAgent:
                             f"[bg_raw][{vo_input_idx}:a]sidechaincompress=threshold=0.08:ratio=8:attack=100:release=400[ducked_bg]"
                         )
                         flt_parts.append(
-                            f"[ducked_bg][{vo_input_idx}:a]amix=inputs=2:duration=first:dropout_transition=0,asplit=2[a_master1][a_master2]"
+                            f"[ducked_bg][{vo_input_idx}:a]amix=inputs=2:duration=first:dropout_transition=0{tempo_flt},asplit=2[a_master1][a_master2]"
                         )
                     else:
                         flt_parts.append(
-                            f"[bg_raw][{vo_input_idx}:a]amix=inputs=2:duration=first:dropout_transition=0,asplit=2[a_master1][a_master2]"
+                            f"[bg_raw][{vo_input_idx}:a]amix=inputs=2:duration=first:dropout_transition=0{tempo_flt},asplit=2[a_master1][a_master2]"
                         )
                 elif vo_input_idx is not None:
-                    flt_parts.append(f"[{vo_input_idx}:a]asplit=2[a_master1][a_master2]")
+                    flt_parts.append(f"[{vo_input_idx}:a]{tempo_flt.lstrip(',') if tempo_flt else 'anull'},asplit=2[a_master1][a_master2]")
                 elif bg_input_idx is not None or bg_source_type == "orig":
-                    if bg_source_type == "bgm":
-                        flt_parts.append(f"[{bg_input_idx}:a]aloop=loop=-1:size=2e+09,atrim=0:{target_dur_str},volume={ambient_vol:.2f},asplit=2[a_master1][a_master2]")
+                    if bg_source_type == "both":
+                        flt_parts.append(f"[{bg_input_idx}:a]apad=whole_dur={target_dur_str},atrim=0:{target_dur_str},volume={ambient_vol:.2f}[sfx_pre]")
+                        flt_parts.append(f"[{bg_extra_idx}:a]aloop=loop=-1:size=2e+09,atrim=0:{target_dur_str},volume={ambient_vol * 0.8:.2f}[bgm_pre]")
+                        flt_parts.append(f"[sfx_pre][bgm_pre]amix=inputs=2:duration=first:dropout_transition=0{tempo_flt},asplit=2[a_master1][a_master2]")
+                    elif bg_source_type == "bgm":
+                        flt_parts.append(f"[{bg_input_idx}:a]aloop=loop=-1:size=2e+09,atrim=0:{target_dur_str},volume={ambient_vol:.2f}{tempo_flt},asplit=2[a_master1][a_master2]")
                     elif bg_source_type == "demucs":
-                        flt_parts.append(f"[{bg_input_idx}:a]apad=whole_dur={target_dur_str},atrim=0:{target_dur_str},volume={ambient_vol:.2f},asplit=2[a_master1][a_master2]")
+                        flt_parts.append(f"[{bg_input_idx}:a]apad=whole_dur={target_dur_str},atrim=0:{target_dur_str},volume={ambient_vol:.2f}{tempo_flt},asplit=2[a_master1][a_master2]")
                     else:
-                        flt_parts.append(f"[0:a]apad=whole_dur={target_dur_str},atrim=0:{target_dur_str},volume={ambient_vol:.2f},asplit=2[a_master1][a_master2]")
+                        flt_parts.append(f"[0:a]apad=whole_dur={target_dur_str},atrim=0:{target_dur_str},volume={ambient_vol:.2f}{tempo_flt},asplit=2[a_master1][a_master2]")
                 else:
                     flt_parts.append(f"aevalsrc=0:d={target_dur_str},asplit=2[a_master1][a_master2]")
 

@@ -340,6 +340,69 @@ def main():
         help="Narration Script Engine: 'recap' (True Myanmar Movie Recap Storyteller) or 'translate' (1:1 Spoken Dialogue Dubbing)"
     )
     parser.add_argument(
+        "--translation-style", "--style",
+        dest="translation_style",
+        choices=["recap", "dialogue", "persona"],
+        default=None,
+        help="Translation Style: 'recap' (Movie Recap Storyteller), 'dialogue' (1:1 Natural Spoken Subtitle), 'persona' (Gender & Kinship Persona Dubbing)"
+    )
+    parser.add_argument(
+        "--audio-mode",
+        dest="audio_mode",
+        choices=["ai_voiceover", "original", "none"],
+        default="ai_voiceover",
+        help="Audio mode: 'ai_voiceover' (TTS narration), 'original' (100% original movie audio), 'none' (Mute original audio)"
+    )
+    parser.add_argument(
+        "--sfx-mode",
+        dest="sfx_mode",
+        choices=["original_sfx", "bgm", "both", "none"],
+        default="original_sfx",
+        help="Background SFX audio: 'original_sfx' (Demucs foley), 'bgm' (Cinematic music), 'both' (Demucs + BGM mix), 'none' (Clean voiceover)"
+    )
+    parser.add_argument(
+        "--sfx-volume",
+        dest="sfx_volume",
+        type=float,
+        default=0.15,
+        help="Background audio / SFX volume intensity (default: 0.15)"
+    )
+    parser.add_argument(
+        "--blur-mode",
+        dest="blur_mode",
+        choices=["auto", "yes", "no"],
+        default="auto",
+        help="Vision AI Subtitle Blur: 'auto' (detect via Vision AI), 'yes' (force blur), 'no' (off)"
+    )
+    parser.add_argument(
+        "--blur-height",
+        dest="blur_height",
+        type=float,
+        default=None,
+        help="Custom height percentage (0.05-0.35) for subtitle blur region"
+    )
+    parser.add_argument(
+        "--mirror",
+        dest="mirror",
+        action="store_true",
+        default=False,
+        help="Mirror video horizontally for anti-copyright shield"
+    )
+    parser.add_argument(
+        "--audio-anti-copyright",
+        dest="audio_anti_copyright",
+        action="store_true",
+        default=False,
+        help="Apply audio tempo shield (atempo=1.008) against Content ID matching"
+    )
+    parser.add_argument(
+        "--no-render", "--subtitles-only",
+        dest="no_render",
+        action="store_true",
+        default=False,
+        help="Skip heavy video rendering and export subtitles and audio deliverables only"
+    )
+    parser.add_argument(
         "--resume",
         action="store_true",
         default=True,
@@ -441,7 +504,7 @@ def main():
         if args.engine_mode == "hardsub":
             from hardsub_engine import HardsubEngine
             engine = HardsubEngine()
-            blur_opt = "yes" if args.subtitle else "auto"
+            blur_opt = args.blur_mode if args.blur_mode else ("yes" if args.subtitle else "auto")
             engine.run(
                 input_source=movie_path,
                 video_format=chosen_format or "both",
@@ -452,6 +515,11 @@ def main():
                 mirror=args.mirror,
                 audio_anti_copyright=args.audio_anti_copyright,
                 source_language=args.source_lang or "auto",
+                translation_style=args.translation_style or "persona",
+                audio_mode=args.audio_mode or "original",
+                sfx_mode=args.sfx_mode or "original_sfx",
+                sfx_volume=args.sfx_volume,
+                render_video=not args.no_render,
             )
             return
         elif args.engine_mode == "subtitle":
@@ -460,6 +528,18 @@ def main():
             engine.run(
                 input_source=movie_path,
                 source_language=args.source_lang or "auto",
+                translation_style=args.translation_style or "dialogue",
+                audio_mode=args.audio_mode or "original",
+                sfx_mode=args.sfx_mode or "original_sfx",
+                sfx_volume=args.sfx_volume,
+                render_video=not args.no_render,
+                video_format=chosen_format or "16:9",
+                resolution=args.resolution or "1080p",
+                subtitle_style=args.subtitle_style or "box_black",
+                blur_mode=args.blur_mode or "auto",
+                mirror=args.mirror,
+                blur_height=args.blur_height,
+                audio_anti_copyright=args.audio_anti_copyright,
             )
             return
 
@@ -486,6 +566,15 @@ def main():
                 resume=should_resume,
                 skip_demucs=args.skip_demucs,
                 detect_scenes=detect_scenes_flag,
+                translation_style=args.translation_style,
+                audio_mode=args.audio_mode,
+                sfx_mode=args.sfx_mode,
+                sfx_volume=args.sfx_volume,
+                blur_mode=args.blur_mode,
+                blur_height=args.blur_height,
+                mirror=args.mirror,
+                audio_anti_copyright=args.audio_anti_copyright,
+                render_video=not args.no_render,
             )
             master.run_pipeline()
         except Exception as e:

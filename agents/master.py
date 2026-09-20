@@ -108,6 +108,16 @@ class MasterAgent:
         trim_end: float = None,
         no_smart_trim: bool = None,
         outro_card: bool = None,
+        translation_style: str = None,
+        audio_mode: str = None,
+        sfx_mode: str = None,
+        sfx_volume: float = None,
+        blur_mode: str = None,
+        blur_height: float = None,
+        mirror: bool = None,
+        audio_anti_copyright: bool = None,
+        render_video: bool = None,
+        stage_toggles: dict = None,
     ):
         self.movie_path = movie_path
         self.resume = bool(resume)
@@ -130,8 +140,40 @@ class MasterAgent:
         else:
             self.video_format = "both"
 
-        raw_engine = str(script_engine or os.getenv("SCRIPT_ENGINE") or cfg.get("pipeline", {}).get("script_engine", "recap")).lower()
-        self.script_engine = "translate" if raw_engine in ["translate", "dubbing", "1:1"] else "recap"
+        # Translation Style & Script Engine Mapping
+        raw_style = str(translation_style or script_engine or os.getenv("TRANSLATION_STYLE") or os.getenv("SCRIPT_ENGINE") or "recap").lower().strip()
+        if raw_style in ["persona", "character", "kinship"]:
+            self.translation_style = "persona"
+            self.script_engine = "translate"
+        elif raw_style in ["dialogue", "translate", "dubbing", "1:1"]:
+            self.translation_style = "dialogue"
+            self.script_engine = "translate"
+        else:
+            self.translation_style = "recap"
+            self.script_engine = "recap"
+
+        self.audio_mode = str(audio_mode or os.getenv("AUDIO_MODE") or "ai_voiceover").lower().strip()
+        self.sfx_mode = str(sfx_mode or os.getenv("SFX_MODE") or "original_sfx").lower().strip()
+        self.sfx_volume = float(sfx_volume if sfx_volume is not None else 0.15)
+        self.blur_mode = str(blur_mode or os.getenv("BLUR_MODE") or "auto").lower().strip()
+        self.blur_height = float(blur_height) if blur_height is not None else None
+        self.mirror = bool(mirror if mirror is not None else (os.getenv("MIRROR_VIDEO") == "true"))
+        self.audio_anti_copyright = bool(audio_anti_copyright if audio_anti_copyright is not None else (os.getenv("AUDIO_ANTI_COPYRIGHT") == "true"))
+        self.render_video = bool(render_video if render_video is not None else True)
+        self.stage_toggles = stage_toggles or {}
+
+        # Apply Stage Toggles
+        if self.stage_toggles.get("demucs") is False:
+            self.skip_demucs = True
+        if self.stage_toggles.get("scenes") is False:
+            self.detect_scenes = False
+        if self.stage_toggles.get("blur") is False:
+            self.blur_mode = "no"
+        if self.stage_toggles.get("render") is False:
+            self.render_video = False
+        if self.stage_toggles.get("reels") is False:
+            if self.video_format == "both":
+                self.video_format = "16:9"
 
         self.state = MovieState(movie_name=movie_name)
         self.state.movie_path = movie_path
@@ -142,6 +184,15 @@ class MasterAgent:
         self.state.video_format = self.video_format
         self.state.source_language = str(source_language or "auto").lower().strip()
         self.state.script_engine = self.script_engine
+        self.state.translation_style = self.translation_style
+        self.state.audio_mode = self.audio_mode
+        self.state.sfx_mode = self.sfx_mode
+        self.state.sfx_volume = self.sfx_volume
+        self.state.blur_mode = self.blur_mode
+        self.state.blur_height = self.blur_height
+        self.state.mirror = self.mirror
+        self.state.audio_anti_copyright = self.audio_anti_copyright
+        self.state.render_video = self.render_video
 
         # Outro & Subscribe Protection Settings
         self.state.trim_end = float(trim_end) if trim_end is not None else None
@@ -304,7 +355,9 @@ class MasterAgent:
 
         self.whisper_model          = whisper_model
         self.tts_enabled            = cfg["voice"]["enabled"]
-        self.subtitle_blur_override = None
+        if self.audio_mode in ["original", "none"] or self.stage_toggles.get("tts") is False:
+            self.tts_enabled = False
+        self.subtitle_blur_override = self.blur_mode if self.blur_mode in ["yes", "no", "auto"] else None
         self.output_dir             = output_dir
 
         # Instantiate all agents
@@ -676,7 +729,22 @@ class MasterAgent:
                 self.state.phase_durations["Phase 5: Voice Generation"] = 0.0
 
             # Phase 6: Video Merge & Subtitle Blur Pass
-            if self._should_run_phase(PHASE_6_MERGE):
+            if not self.render_video:
+                print("\n[*] Phase 6: Video Merge skipped (render_video = False). Exporting standalone subtitles.")
+                sub_timings = getattr(self.state, "subtitle_timings", None) or []
+                if not sub_timings and self.state.generated_script:
+                    for block in self.state.generated_script:
+                        if isinstance(block, dict):
+                            s_start = float(block.get("start_sec") or 0.0)
+                            s_end = float(block.get("end_sec") or (s_start + 3.0))
+                            txt = str(block.get("narration") or block.get("text") or "").strip()
+                            if txt:
+                                sub_timings.append((s_start, max(s_end - s_start, 0.8), txt))
+                if sub_timings:
+                    out_p = os.path.join(self.output_dir, self.state.project_dir)
+                    self.video_merger._export_standalone_srt(sub_timings, out_p)
+                self.save_checkpoint(PHASE_6_MERGE, "Phase 6: Subtitle Export Only (Video Render Disabled)")
+            elif self._should_run_phase(PHASE_6_MERGE):
                 p6_t0 = time.time()
                 self._phase("Phase 6: Merging Video + Voiceover + Subtitle Blur", progress=90)
                 self.state = self.video_merger.merge_video(self.state, self.movie_path)

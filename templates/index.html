@@ -1355,10 +1355,45 @@
                 </select>
             </div>
             <div style="display:inline-flex; align-items:center; gap:0.5rem;">
-                <span class="strip-title" style="color:var(--muted); font-weight:700;">🎙️ Script Engine:</span>
-                <select class="lang-select" id="select-script-engine" onchange="updateScriptEngineSetting(this.value)" style="padding:0.35rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600; color:#00ffcc; border-color:rgba(0,255,204,0.3);">
-                    <option value="recap" selected>🎬 Recap Engine (ဇာတ်လမ်းပြောပြသူ စတိုင်)</option>
-                    <option value="translate">🗣️ Translate Engine (၁:၁ တိုက်ရိုက် စကားပြန်စတိုင်)</option>
+                <span class="strip-title" style="color:var(--muted); font-weight:700;">✍️ Translation Style:</span>
+                <select class="lang-select" id="select-translation-style" onchange="updateTranslationStyleSync(this.value)" style="padding:0.35rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:700; color:#0ea5e9; border:1px solid rgba(14,165,233,0.35);">
+                    <option value="recap" selected>🎬 Movie Recap Storyteller (ဇာတ်လမ်းပြောပြသူ စတိုင်)</option>
+                    <option value="dialogue">🗣️ 1:1 Natural Spoken Dialogue (သဘာဝကျ ၁:၁ စကားပြောဟန်)</option>
+                    <option value="persona">👥 Character Gender & Kinship Dubbing (ဇာတ်ကောင်ကျား/မ/အရွယ်အလိုက် ပြန်ဆိုမှု)</option>
+                </select>
+                <!-- Hidden compatibility mirror for legacy script engine selector -->
+                <input type="hidden" id="select-script-engine" value="recap">
+            </div>
+            <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                <span class="strip-title" style="color:var(--muted); font-weight:700;">🎧 Audio Mode:</span>
+                <select class="lang-select" id="select-audio-mode" onchange="toggleAudioModeControls(this.value)" style="padding:0.35rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600;">
+                    <option value="ai_voiceover" selected>🎙️ AI Voiceover (AI ဇာတ်ကြောင်းပြော အသံသစ်)</option>
+                    <option value="original">🎵 100% Original Audio (မူရင်းအသံ ၁၀၀% သီးသန့်)</option>
+                </select>
+            </div>
+            <div id="sfx-mode-wrap" style="display:inline-flex; align-items:center; gap:0.5rem;">
+                <span class="strip-title" style="color:var(--muted); font-weight:700;">🔊 SFX System:</span>
+                <select class="lang-select" id="select-sfx-mode" style="padding:0.35rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600;">
+                    <option value="original_sfx" selected>🔊 Original Foley SFX (Demucs သဘာဝအသံ)</option>
+                    <option value="bgm">🎵 Cinematic BGM (ရုပ်ရှင်နောက်ခံတေး)</option>
+                    <option value="both">🎛️ SFX + BGM Mix (Foley + BGM ရောစပ်သံ)</option>
+                    <option value="none">🚫 Clean Voiceover Only (နောက်ခံအသံ မပါ)</option>
+                </select>
+            </div>
+            <div id="sfx-volume-wrap" style="display:inline-flex; align-items:center; gap:0.5rem;">
+                <span class="strip-title" style="color:var(--muted); font-weight:700;">🎚️ SFX Vol:</span>
+                <select class="lang-select" id="select-sfx-volume" style="padding:0.35rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600;">
+                    <option value="0.10">10% အလွန်တိုး</option>
+                    <option value="0.15" selected>15% သင့်တင့် (Recommended)</option>
+                    <option value="0.25">25% ထင်ရှား</option>
+                    <option value="0.40">40% အကျယ်ဆုံး</option>
+                </select>
+            </div>
+            <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                <span class="strip-title" style="color:var(--muted); font-weight:700;">📦 Output Mode:</span>
+                <select class="lang-select" id="select-render-video" style="padding:0.35rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600;">
+                    <option value="true" selected>🎬 Render Video (ဗီဒီယိုပါ Render ထုတ်မည်)</option>
+                    <option value="false">📄 Subtitles Only (.srt / .ass / .txt သီးသန့် အမြန်)</option>
                 </select>
             </div>
             <div style="display:inline-flex; align-items:center; gap:0.5rem;">
@@ -1409,6 +1444,13 @@
                 <label style="font-size:0.82rem; cursor:pointer;">
                     <input type="checkbox" id="chk-mirror" onchange="updateMirrorSetting(this.checked)">
                     🪞 Mirror Video (ဘယ်ညာလှည့် — Maximum Protection)
+                </label>
+            </div>
+            <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                <span class="strip-title" style="color:var(--muted); font-weight:700;">🎵 Audio Shield:</span>
+                <label style="font-size:0.82rem; cursor:pointer;" title="Subtly perturb audio tempo (atempo=1.008) to evade audio Content ID fingerprinting">
+                    <input type="checkbox" id="chk-audio-anti-copyright">
+                    🛡️ Audio Anti-Copyright (atempo=1.008)
                 </label>
             </div>
             <div style="display:inline-flex; align-items:center; gap:0.5rem;">
@@ -1530,6 +1572,121 @@
                 </div>
             </div>
         </div>
+
+        <!-- ══ STAGE-BY-STAGE PIPELINE SWITCHES (အဆင့်အလိုက် ဖွင့်/ပိတ်နိုင်သော စနစ်) ══ -->
+        <div id="pipeline-stage-switches-card" style="background:white; padding:1.1rem 1.35rem; border-radius:14px; border:1px solid rgba(0,0,0,0.08); box-shadow:0 4px 16px rgba(0,0,0,0.03); margin-top:1.1rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; flex-wrap:wrap; gap:0.6rem;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:1.35rem;">🎛️</span>
+                    <div>
+                        <strong style="font-size:0.92rem; color:var(--text);">Pipeline Stage Switches (အဆင့်အလိုက် ဖွင့်/ပိတ်နိုင်သော စနစ်)</strong>
+                        <div style="font-size:0.75rem; color:var(--muted);">မိမိလိုအပ်သော Pipeline အဆင့် ၁၀ ဆင့်ကို စိတ်ကြိုက် ဖွင့်/ပိတ်၍ အချိန်နှင့် သယံဇာတ သက်သာစွာ ထုတ်လုပ်နိုင်ပါသည်</div>
+                    </div>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                    <span id="active-stages-badge" style="font-size:0.75rem; padding:3px 10px; border-radius:6px; background:rgba(46,213,115,0.15); color:var(--success); font-weight:700; border:1px solid rgba(46,213,115,0.3);">
+                        ⚡ 10/10 Stages Active
+                    </span>
+                    <button type="button" onclick="applyStagePreset('all')" style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; font-size:0.72rem; padding:4px 9px; border-radius:5px; cursor:pointer; font-weight:700;">✨ All On</button>
+                    <button type="button" onclick="applyStagePreset('recap')" style="background:rgba(99,102,241,0.1); border:1px solid rgba(99,102,241,0.25); color:#6366f1; font-size:0.72rem; padding:4px 9px; border-radius:5px; cursor:pointer; font-weight:700;">🎬 Recap Studio</button>
+                    <button type="button" onclick="applyStagePreset('subtitle')" style="background:rgba(124,58,237,0.1); border:1px solid rgba(124,58,237,0.25); color:#7c3aed; font-size:0.72rem; padding:4px 9px; border-radius:5px; cursor:pointer; font-weight:700;">📝 Subtitle Only</button>
+                    <button type="button" onclick="applyStagePreset('hardsub')" style="background:rgba(255,75,43,0.1); border:1px solid rgba(255,75,43,0.25); color:#ff4b2b; font-size:0.72rem; padding:4px 9px; border-radius:5px; cursor:pointer; font-weight:700;">🔥 Original Hardsub</button>
+                </div>
+            </div>
+
+            <!-- 10 Interactive Grid Switches -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(210px, 1fr)); gap:0.65rem; margin-top:0.75rem;">
+                <!-- Stage 1: Download -->
+                <label class="stage-switch-item" style="display:flex; align-items:center; gap:8px; padding:9px 12px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; cursor:pointer; font-size:0.82rem; font-weight:600; color:var(--text); transition:all 0.2s ease;">
+                    <input type="checkbox" id="stage-toggle-download" checked onchange="updateStageBadge('stage-toggle-download')">
+                    <div>
+                        <div>📥 1. Video Download</div>
+                        <div style="font-size:0.68rem; color:var(--muted); font-weight:400;">YouTube/Direct download</div>
+                    </div>
+                </label>
+
+                <!-- Stage 2: Metadata & Visual -->
+                <label class="stage-switch-item" style="display:flex; align-items:center; gap:8px; padding:9px 12px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; cursor:pointer; font-size:0.82rem; font-weight:600; color:var(--text); transition:all 0.2s ease;">
+                    <input type="checkbox" id="stage-toggle-metadata" checked onchange="updateStageBadge('stage-toggle-metadata')">
+                    <div>
+                        <div>🔍 2. Scene Metadata</div>
+                        <div style="font-size:0.68rem; color:var(--muted); font-weight:400;">Visual synopsis extraction</div>
+                    </div>
+                </label>
+
+                <!-- Stage 3: Demucs -->
+                <label class="stage-switch-item" style="display:flex; align-items:center; gap:8px; padding:9px 12px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; cursor:pointer; font-size:0.82rem; font-weight:600; color:var(--text); transition:all 0.2s ease;">
+                    <input type="checkbox" id="stage-toggle-demucs" checked onchange="updateStageBadge('stage-toggle-demucs')">
+                    <div>
+                        <div>🎵 3. Demucs Split</div>
+                        <div style="font-size:0.68rem; color:var(--muted); font-weight:400;">Vocal & Foley separation</div>
+                    </div>
+                </label>
+
+                <!-- Stage 4: Transcription -->
+                <label class="stage-switch-item" style="display:flex; align-items:center; gap:8px; padding:9px 12px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; cursor:pointer; font-size:0.82rem; font-weight:600; color:var(--text); transition:all 0.2s ease;">
+                    <input type="checkbox" id="stage-toggle-transcription" checked onchange="updateStageBadge('stage-toggle-transcription')">
+                    <div>
+                        <div>🎙️ 4. Whisper Transcript</div>
+                        <div style="font-size:0.68rem; color:var(--muted); font-weight:400;">Speech-to-text timing</div>
+                    </div>
+                </label>
+
+                <!-- Stage 5: PySceneDetect -->
+                <label class="stage-switch-item" style="display:flex; align-items:center; gap:8px; padding:9px 12px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; cursor:pointer; font-size:0.82rem; font-weight:600; color:var(--text); transition:all 0.2s ease;">
+                    <input type="checkbox" id="stage-toggle-scenes" checked onchange="updateStageBadge('stage-toggle-scenes')">
+                    <div>
+                        <div>✂️ 5. Scene Cut Detect</div>
+                        <div style="font-size:0.68rem; color:var(--muted); font-weight:400;">PySceneDetect cuts</div>
+                    </div>
+                </label>
+
+                <!-- Stage 6: Translation -->
+                <label class="stage-switch-item" style="display:flex; align-items:center; gap:8px; padding:9px 12px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; cursor:pointer; font-size:0.82rem; font-weight:600; color:var(--text); transition:all 0.2s ease;">
+                    <input type="checkbox" id="stage-toggle-translation" checked onchange="updateStageBadge('stage-toggle-translation')">
+                    <div>
+                        <div>🇲🇲 6. Gemini Translation</div>
+                        <div style="font-size:0.68rem; color:var(--muted); font-weight:400;">Persona & style mapping</div>
+                    </div>
+                </label>
+
+                <!-- Stage 7: TTS Voiceover -->
+                <label class="stage-switch-item" style="display:flex; align-items:center; gap:8px; padding:9px 12px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; cursor:pointer; font-size:0.82rem; font-weight:600; color:var(--text); transition:all 0.2s ease;">
+                    <input type="checkbox" id="stage-toggle-tts" checked onchange="updateStageBadge('stage-toggle-tts')">
+                    <div>
+                        <div>🗣️ 7. Neural TTS Voice</div>
+                        <div style="font-size:0.68rem; color:var(--muted); font-weight:400;">Edge / F5 Myanmar audio</div>
+                    </div>
+                </label>
+
+                <!-- Stage 8: Subtitle Blur -->
+                <label class="stage-switch-item" style="display:flex; align-items:center; gap:8px; padding:9px 12px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; cursor:pointer; font-size:0.82rem; font-weight:600; color:var(--text); transition:all 0.2s ease;">
+                    <input type="checkbox" id="stage-toggle-blur" checked onchange="updateStageBadge('stage-toggle-blur')">
+                    <div>
+                        <div>🌫️ 8. Subtitle Blur Mask</div>
+                        <div style="font-size:0.68rem; color:var(--muted); font-weight:400;">Vision AI mask overlay</div>
+                    </div>
+                </label>
+
+                <!-- Stage 9: Video Render -->
+                <label class="stage-switch-item" style="display:flex; align-items:center; gap:8px; padding:9px 12px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; cursor:pointer; font-size:0.82rem; font-weight:600; color:var(--text); transition:all 0.2s ease;">
+                    <input type="checkbox" id="stage-toggle-render" checked onchange="updateStageBadge('stage-toggle-render')">
+                    <div>
+                        <div>🎞️ 9. Video Compositing</div>
+                        <div style="font-size:0.68rem; color:var(--muted); font-weight:400;">FFmpeg render & subtitles</div>
+                    </div>
+                </label>
+
+                <!-- Stage 10: 9:16 Reels -->
+                <label class="stage-switch-item" style="display:flex; align-items:center; gap:8px; padding:9px 12px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; cursor:pointer; font-size:0.82rem; font-weight:600; color:var(--text); transition:all 0.2s ease;">
+                    <input type="checkbox" id="stage-toggle-reels" checked onchange="updateStageBadge('stage-toggle-reels')">
+                    <div>
+                        <div>📱 10. 9:16 Reels Canvas</div>
+                        <div style="font-size:0.68rem; color:var(--muted); font-weight:400;">TikTok/Shorts export</div>
+                    </div>
+                </label>
+            </div>
+        </div>
         </div>
         <!-- ══ SUBTITLE ENGINE PANEL ══ -->
         <div id="subtitle-engine-panel" style="display:none; margin-top:0.5rem;">
@@ -1572,7 +1729,22 @@
             <div style="display:flex; flex-wrap:wrap; gap:1.25rem; align-items:center; background:rgba(0,0,0,0.02); padding:12px 16px; border-radius:10px; border:1px solid rgba(0,0,0,0.05);">
                 <div style="display:inline-flex; align-items:center; gap:0.5rem;">
                     <span style="color:var(--muted); font-weight:700; font-size:0.82rem;">🏷️ Project Name:</span>
-                    <input type="text" id="input-sub-proj-name" placeholder="Optional custom slug" style="padding:0.4rem 0.75rem; font-size:0.82rem; border-radius:8px; border:1px solid rgba(0,0,0,0.1); width:210px;">
+                    <input type="text" id="input-sub-proj-name" placeholder="Optional custom slug" style="padding:0.4rem 0.75rem; font-size:0.82rem; border-radius:8px; border:1px solid rgba(0,0,0,0.1); width:180px;">
+                </div>
+                <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                    <span style="color:var(--muted); font-weight:700; font-size:0.82rem;">✍️ Translation Style:</span>
+                    <select class="lang-select" id="select-sub-translation-style" style="padding:0.4rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:700; color:#7c3aed; border:1px solid rgba(124,58,237,0.35);">
+                        <option value="dialogue" selected>🗣️ 1:1 Natural Spoken Dialogue (သဘာဝကျ ၁:၁ စကားပြောဟန်)</option>
+                        <option value="persona">👥 Character Gender & Kinship Dubbing (ဇာတ်ကောင်ကျား/မ/အရွယ်အလိုက် ပြန်ဆိုမှု)</option>
+                        <option value="recap">🎬 Movie Recap Storyteller (ဇာတ်လမ်းပြောပြသူ စတိုင်)</option>
+                    </select>
+                </div>
+                <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                    <span style="color:var(--muted); font-weight:700; font-size:0.82rem;">📦 Deliverable:</span>
+                    <select class="lang-select" id="select-sub-render-video" style="padding:0.4rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600;">
+                        <option value="false" selected>📄 Subtitles & Transcripts Only (.srt / .txt အမြန်ဆုံး)</option>
+                        <option value="true">🎬 Burn Subtitles into Video (ဗီဒီယိုပါ Render မည်)</option>
+                    </select>
                 </div>
                 <div style="display:inline-flex; align-items:center; gap:0.5rem;">
                     <span style="color:var(--muted); font-weight:700; font-size:0.82rem;">🌐 Source Language:</span>
@@ -1634,6 +1806,37 @@
 
             <!-- Hardsub Options Strip -->
             <div style="display:flex; flex-wrap:wrap; gap:1.25rem; align-items:center; background:white; padding:14px 18px; border-radius:12px; border:1px solid rgba(0,0,0,0.07); box-shadow:0 4px 12px rgba(0,0,0,0.02); margin-bottom:1rem;">
+                <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                    <span style="color:var(--muted); font-weight:700; font-size:0.82rem;">✍️ Translation Style:</span>
+                    <select class="lang-select" id="select-hardsub-translation-style" style="padding:0.4rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:700; color:#ff4b2b; border:1px solid rgba(255,75,43,0.35);">
+                        <option value="persona" selected>👥 Character Gender & Kinship Dubbing (ဇာတ်ကောင်ကျား/မ/အရွယ်အလိုက် ပြန်ဆိုမှု)</option>
+                        <option value="dialogue">🗣️ 1:1 Natural Spoken Dialogue (သဘာဝကျ ၁:၁ စကားပြောဟန်)</option>
+                        <option value="recap">🎬 Movie Recap Storyteller (ဇာတ်လမ်းပြောပြသူ စတိုင်)</option>
+                    </select>
+                </div>
+                <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                    <span style="color:var(--muted); font-weight:700; font-size:0.82rem;">🎧 Audio Mode:</span>
+                    <select class="lang-select" id="select-hardsub-audio-mode" style="padding:0.4rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600;">
+                        <option value="original" selected>🎵 100% Original Audio (မူရင်းအသံ ၁၀၀% မပျက်မစီး ထိန်းသိမ်းမည်)</option>
+                        <option value="ai_voiceover">🎙️ AI Voiceover (AI ဇာတ်ကြောင်းပြော အသံသစ်သွင်းမည်)</option>
+                    </select>
+                </div>
+                <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                    <span style="color:var(--muted); font-weight:700; font-size:0.82rem;">🔊 SFX System:</span>
+                    <select class="lang-select" id="select-hardsub-sfx-mode" style="padding:0.4rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600;">
+                        <option value="original_sfx" selected>🔊 Original Foley SFX (Demucs သဘာဝအသံ)</option>
+                        <option value="bgm">🎵 Cinematic BGM (ရုပ်ရှင်နောက်ခံတေး)</option>
+                        <option value="both">🎛️ SFX + BGM Mix (Foley + BGM ရောစပ်သံ)</option>
+                        <option value="none">🚫 Clean Audio Only</option>
+                    </select>
+                </div>
+                <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                    <span style="color:var(--muted); font-weight:700; font-size:0.82rem;">📦 Output Mode:</span>
+                    <select class="lang-select" id="select-hardsub-render-video" style="padding:0.4rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600;">
+                        <option value="true" selected>🎬 Render Hardsub Video (ဗီဒီယိုပါ Render မည်)</option>
+                        <option value="false">📄 Subtitles & Reports Only (.srt / .ass / .txt သီးသန့်)</option>
+                    </select>
+                </div>
                 <div style="display:inline-flex; align-items:center; gap:0.5rem;">
                     <span style="color:var(--muted); font-weight:700; font-size:0.82rem;">🌐 Source Audio:</span>
                     <select class="lang-select" id="select-hardsub-source-lang" style="padding:0.4rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600;">
@@ -2271,6 +2474,127 @@
         if (panelRecap) panelRecap.style.display = (engine === 'recap') ? 'block' : 'none';
         if (panelSub) panelSub.style.display = (engine === 'subtitle') ? 'block' : 'none';
         if (panelHard) panelHard.style.display = (engine === 'hardsub') ? 'block' : 'none';
+
+        applyStagePreset(engine);
+    }
+
+    function getStageToggles() {
+        return {
+            download: document.getElementById('stage-toggle-download') ? document.getElementById('stage-toggle-download').checked : true,
+            metadata: document.getElementById('stage-toggle-metadata') ? document.getElementById('stage-toggle-metadata').checked : true,
+            demucs: document.getElementById('stage-toggle-demucs') ? document.getElementById('stage-toggle-demucs').checked : true,
+            transcription: document.getElementById('stage-toggle-transcription') ? document.getElementById('stage-toggle-transcription').checked : true,
+            scenes: document.getElementById('stage-toggle-scenes') ? document.getElementById('stage-toggle-scenes').checked : true,
+            translation: document.getElementById('stage-toggle-translation') ? document.getElementById('stage-toggle-translation').checked : true,
+            tts: document.getElementById('stage-toggle-tts') ? document.getElementById('stage-toggle-tts').checked : true,
+            blur: document.getElementById('stage-toggle-blur') ? document.getElementById('stage-toggle-blur').checked : true,
+            render: document.getElementById('stage-toggle-render') ? document.getElementById('stage-toggle-render').checked : true,
+            reels: document.getElementById('stage-toggle-reels') ? document.getElementById('stage-toggle-reels').checked : true
+        };
+    }
+
+    function updateStageBadge(id) {
+        updateActiveStagesCount();
+    }
+
+    function updateActiveStagesCount() {
+        const toggles = getStageToggles();
+        let activeCount = 0;
+        let totalCount = 10;
+        Object.values(toggles).forEach(v => { if (v) activeCount++; });
+        const badge = document.getElementById('active-stages-badge');
+        if (badge) {
+            badge.textContent = `⚡ ${activeCount}/${totalCount} Stages Active`;
+            if (activeCount === totalCount) {
+                badge.style.background = 'rgba(46,213,115,0.15)';
+                badge.style.color = 'var(--success)';
+                badge.style.borderColor = 'rgba(46,213,115,0.3)';
+            } else if (activeCount >= 5) {
+                badge.style.background = 'rgba(255,165,2,0.15)';
+                badge.style.color = '#d97706';
+                badge.style.borderColor = 'rgba(255,165,2,0.3)';
+            } else {
+                badge.style.background = 'rgba(239,68,68,0.15)';
+                badge.style.color = '#ef4444';
+                badge.style.borderColor = 'rgba(239,68,68,0.3)';
+            }
+        }
+    }
+
+    function applyStagePreset(preset) {
+        const setToggle = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.checked = val;
+        };
+        if (preset === 'recap') {
+            setToggle('stage-toggle-download', true);
+            setToggle('stage-toggle-metadata', true);
+            setToggle('stage-toggle-demucs', true);
+            setToggle('stage-toggle-transcription', true);
+            setToggle('stage-toggle-scenes', true);
+            setToggle('stage-toggle-translation', true);
+            setToggle('stage-toggle-tts', true);
+            setToggle('stage-toggle-blur', true);
+            setToggle('stage-toggle-render', true);
+            setToggle('stage-toggle-reels', true);
+            if (document.getElementById('select-translation-style')) document.getElementById('select-translation-style').value = 'recap';
+            if (document.getElementById('select-audio-mode')) document.getElementById('select-audio-mode').value = 'ai_voiceover';
+            if (document.getElementById('select-sfx-mode')) document.getElementById('select-sfx-mode').value = 'original_sfx';
+            if (document.getElementById('select-render-video')) document.getElementById('select-render-video').value = 'true';
+        } else if (preset === 'subtitle') {
+            setToggle('stage-toggle-download', true);
+            setToggle('stage-toggle-metadata', true);
+            setToggle('stage-toggle-demucs', false);
+            setToggle('stage-toggle-transcription', true);
+            setToggle('stage-toggle-scenes', false);
+            setToggle('stage-toggle-translation', true);
+            setToggle('stage-toggle-tts', false);
+            setToggle('stage-toggle-blur', false);
+            setToggle('stage-toggle-render', false);
+            setToggle('stage-toggle-reels', false);
+            if (document.getElementById('select-translation-style')) document.getElementById('select-translation-style').value = 'dialogue';
+            if (document.getElementById('select-audio-mode')) document.getElementById('select-audio-mode').value = 'original';
+            if (document.getElementById('select-sfx-mode')) document.getElementById('select-sfx-mode').value = 'none';
+            if (document.getElementById('select-render-video')) document.getElementById('select-render-video').value = 'false';
+        } else if (preset === 'hardsub') {
+            setToggle('stage-toggle-download', true);
+            setToggle('stage-toggle-metadata', true);
+            setToggle('stage-toggle-demucs', false);
+            setToggle('stage-toggle-transcription', true);
+            setToggle('stage-toggle-scenes', false);
+            setToggle('stage-toggle-translation', true);
+            setToggle('stage-toggle-tts', false);
+            setToggle('stage-toggle-blur', true);
+            setToggle('stage-toggle-render', true);
+            setToggle('stage-toggle-reels', true);
+            if (document.getElementById('select-translation-style')) document.getElementById('select-translation-style').value = 'persona';
+            if (document.getElementById('select-audio-mode')) document.getElementById('select-audio-mode').value = 'original';
+            if (document.getElementById('select-sfx-mode')) document.getElementById('select-sfx-mode').value = 'original_sfx';
+            if (document.getElementById('select-render-video')) document.getElementById('select-render-video').value = 'true';
+        } else if (preset === 'all') {
+            ['download', 'metadata', 'demucs', 'transcription', 'scenes', 'translation', 'tts', 'blur', 'render', 'reels'].forEach(k => {
+                setToggle('stage-toggle-' + k, true);
+            });
+            if (document.getElementById('select-render-video')) document.getElementById('select-render-video').value = 'true';
+        }
+        updateActiveStagesCount();
+    }
+
+    function toggleAudioModeControls(val) {
+        const sfxWrap = document.getElementById('sfx-mode-wrap');
+        const sfxVol = document.getElementById('sfx-volume-wrap');
+        if (val === 'original') {
+            if (sfxWrap) sfxWrap.style.opacity = '0.7';
+        } else {
+            if (sfxWrap) sfxWrap.style.opacity = '1';
+        }
+    }
+
+    function updateTranslationStyleSync(val) {
+        const legacyScript = document.getElementById('select-script-engine');
+        if (legacyScript) {
+            legacyScript.value = (val === 'recap') ? 'recap' : 'translate';
+        }
     }
 
     async function handleSubVideoUpload(inputElement) {
@@ -2353,6 +2677,8 @@
         const sourceLanguage = document.getElementById('select-sub-source-lang') ? document.getElementById('select-sub-source-lang').value : 'auto';
         const projectName = (document.getElementById('input-sub-proj-name') && document.getElementById('input-sub-proj-name').value.trim()) || null;
         const forceWhisper = document.getElementById('chk-force-whisper') ? document.getElementById('chk-force-whisper').checked : false;
+        const translationStyle = document.getElementById('select-sub-translation-style') ? document.getElementById('select-sub-translation-style').value : (document.getElementById('select-translation-style') ? document.getElementById('select-translation-style').value : 'dialogue');
+        const renderVideo = document.getElementById('select-sub-render-video') ? (document.getElementById('select-sub-render-video').value === 'true') : false;
 
         const btn = document.getElementById('btn-start-sub');
         const btnText = document.getElementById('btn-start-sub-text');
@@ -2370,7 +2696,14 @@
                     engine_mode: 'subtitle',
                     project_name: projectName,
                     source_language: sourceLanguage,
-                    force_whisper: forceWhisper
+                    force_whisper: forceWhisper,
+                    translation_style: translationStyle,
+                    audio_mode: 'original',
+                    sfx_mode: document.getElementById('select-sfx-mode') ? document.getElementById('select-sfx-mode').value : 'none',
+                    sfx_volume: document.getElementById('select-sfx-volume') ? parseFloat(document.getElementById('select-sfx-volume').value) : 0.15,
+                    render_video: renderVideo,
+                    stage_toggles: getStageToggles(),
+                    audio_anti_copyright: document.getElementById('chk-audio-anti-copyright') ? document.getElementById('chk-audio-anti-copyright').checked : false,
                 })
             });
             const data = await res.json();
@@ -2413,6 +2746,10 @@
         const colorGrading = document.getElementById('chk-hardsub-color-grading') ? document.getElementById('chk-hardsub-color-grading').checked : true;
         const mirror = document.getElementById('chk-hardsub-mirror') ? document.getElementById('chk-hardsub-mirror').checked : false;
         const forceWhisper = document.getElementById('chk-hardsub-force-whisper') ? document.getElementById('chk-hardsub-force-whisper').checked : false;
+        const translationStyle = document.getElementById('select-hardsub-translation-style') ? document.getElementById('select-hardsub-translation-style').value : (document.getElementById('select-translation-style') ? document.getElementById('select-translation-style').value : 'persona');
+        const audioMode = document.getElementById('select-hardsub-audio-mode') ? document.getElementById('select-hardsub-audio-mode').value : 'original';
+        const sfxMode = document.getElementById('select-hardsub-sfx-mode') ? document.getElementById('select-hardsub-sfx-mode').value : 'original_sfx';
+        const renderVideo = document.getElementById('select-hardsub-render-video') ? (document.getElementById('select-hardsub-render-video').value === 'true') : true;
 
         const btn = document.getElementById('btn-start-hardsub');
         const btnText = document.getElementById('btn-start-hardsub-text');
@@ -2439,7 +2776,13 @@
                     audio_anti_copyright: audioAntiCopyright,
                     mirror: mirror,
                     color_grading: colorGrading,
-                    reels_enabled: (videoFormat === 'both' || videoFormat === '9:16')
+                    reels_enabled: (videoFormat === 'both' || videoFormat === '9:16'),
+                    translation_style: translationStyle,
+                    audio_mode: audioMode,
+                    sfx_mode: sfxMode,
+                    sfx_volume: document.getElementById('select-sfx-volume') ? parseFloat(document.getElementById('select-sfx-volume').value) : 0.15,
+                    render_video: renderVideo,
+                    stage_toggles: getStageToggles()
                 })
             });
             const data = await res.json();
@@ -2787,6 +3130,13 @@
         const skipDemucs = document.getElementById('chk-skip-demucs') ? document.getElementById('chk-skip-demucs').checked : false;
         const detectScenes = document.getElementById('chk-scene-detect') ? document.getElementById('chk-scene-detect').checked : false;
 
+        const translationStyle = document.getElementById('select-translation-style') ? document.getElementById('select-translation-style').value : 'recap';
+        const audioMode = document.getElementById('select-audio-mode') ? document.getElementById('select-audio-mode').value : 'ai_voiceover';
+        const sfxMode = document.getElementById('select-sfx-mode') ? document.getElementById('select-sfx-mode').value : 'original_sfx';
+        const sfxVolume = document.getElementById('select-sfx-volume') ? parseFloat(document.getElementById('select-sfx-volume').value) : 0.15;
+        const renderVideo = document.getElementById('select-render-video') ? (document.getElementById('select-render-video').value === 'true') : true;
+        const audioAntiCopyright = document.getElementById('chk-audio-anti-copyright') ? document.getElementById('chk-audio-anti-copyright').checked : false;
+
         const btn = document.getElementById('btn-start');
         const btnText = document.getElementById('btn-start-text');
 
@@ -2819,7 +3169,14 @@
                     skip_demucs: skipDemucs,
                     detect_scenes: detectScenes,
                     blur_mode: subtitleBlur,
-                    mirror: document.getElementById('chk-mirror') ? document.getElementById('chk-mirror').checked : false
+                    mirror: document.getElementById('chk-mirror') ? document.getElementById('chk-mirror').checked : false,
+                    audio_anti_copyright: audioAntiCopyright,
+                    translation_style: translationStyle,
+                    audio_mode: audioMode,
+                    sfx_mode: sfxMode,
+                    sfx_volume: sfxVolume,
+                    render_video: renderVideo,
+                    stage_toggles: getStageToggles()
                 })
             });
             const data = await res.json();
@@ -2873,8 +3230,13 @@
         const blurMode = document.getElementById('select-hardsub-blur') ? document.getElementById('select-hardsub-blur').value : 'auto';
         const blurHeight = document.getElementById('select-hardsub-blur-height') ? parseFloat(document.getElementById('select-hardsub-blur-height').value) : 0.18;
         const colorGrading = document.getElementById('chk-hardsub-color-grading') ? document.getElementById('chk-hardsub-color-grading').checked : true;
-        const audioAntiCopyright = document.getElementById('chk-hardsub-audio-copyright') ? document.getElementById('chk-hardsub-audio-copyright').checked : false;
-        const mirror = document.getElementById('chk-hardsub-mirror') ? document.getElementById('chk-hardsub-mirror').checked : false;
+        const audioAntiCopyright = document.getElementById('chk-audio-anti-copyright') ? document.getElementById('chk-audio-anti-copyright').checked : (document.getElementById('chk-hardsub-audio-copyright') ? document.getElementById('chk-hardsub-audio-copyright').checked : false);
+        const mirror = document.getElementById('chk-hardsub-mirror') ? document.getElementById('chk-hardsub-mirror').checked : (document.getElementById('chk-mirror') ? document.getElementById('chk-mirror').checked : false);
+        const translationStyle = document.getElementById('select-translation-style') ? document.getElementById('select-translation-style').value : (batchEngine === 'hardsub' ? 'persona' : (batchEngine === 'subtitle' ? 'dialogue' : 'recap'));
+        const audioMode = document.getElementById('select-audio-mode') ? document.getElementById('select-audio-mode').value : (batchEngine === 'hardsub' || batchEngine === 'subtitle' ? 'original' : 'ai_voiceover');
+        const sfxMode = document.getElementById('select-sfx-mode') ? document.getElementById('select-sfx-mode').value : 'original_sfx';
+        const sfxVolume = document.getElementById('select-sfx-volume') ? parseFloat(document.getElementById('select-sfx-volume').value) : 0.15;
+        const renderVideo = document.getElementById('select-render-video') ? (document.getElementById('select-render-video').value === 'true') : (batchEngine !== 'subtitle');
 
         const btn = document.getElementById('btn-batch');
         btn.disabled = true;
@@ -2908,7 +3270,13 @@
                     blur_height: blurHeight,
                     color_grading: colorGrading,
                     audio_anti_copyright: audioAntiCopyright,
-                    mirror: mirror
+                    mirror: mirror,
+                    translation_style: translationStyle,
+                    audio_mode: audioMode,
+                    sfx_mode: sfxMode,
+                    sfx_volume: sfxVolume,
+                    render_video: renderVideo,
+                    stage_toggles: getStageToggles()
                 })
             });
             const data = await res.json();

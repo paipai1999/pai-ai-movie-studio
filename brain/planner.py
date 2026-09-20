@@ -31,6 +31,16 @@ class BatchProcessor:
         output_dir: str = None,
         skip_demucs: bool = None,
         detect_scenes: bool = None,
+        translation_style: str = None,
+        audio_mode: str = None,
+        sfx_mode: str = None,
+        sfx_volume: float = None,
+        blur_mode: str = None,
+        blur_height: float = None,
+        mirror: bool = None,
+        audio_anti_copyright: bool = None,
+        render_video: bool = None,
+        stage_toggles: dict = None,
     ):
         self.movies_folder = movies_folder
         self.output_dir = output_dir or cfg.load_config().get("paths", {}).get("output_dir", "outputs")
@@ -53,6 +63,16 @@ class BatchProcessor:
         self.watermark_text = watermark_text
         self.watermark_opacity = watermark_opacity
         self.thumbnail_intro = thumbnail_intro
+        self.translation_style = translation_style
+        self.audio_mode = audio_mode
+        self.sfx_mode = sfx_mode
+        self.sfx_volume = sfx_volume
+        self.blur_mode = blur_mode
+        self.blur_height = blur_height
+        self.mirror = mirror
+        self.audio_anti_copyright = audio_anti_copyright
+        self.render_video = render_video
+        self.stage_toggles = stage_toggles
         self.supported_extensions = [".mp4", ".mkv", ".avi", ".mov", ".webm"]
         self.results = []
 
@@ -160,6 +180,16 @@ class BatchProcessor:
                     cancel_event=self.cancel_event,
                     skip_demucs=self.skip_demucs,
                     detect_scenes=self.detect_scenes,
+                    translation_style=self.translation_style,
+                    audio_mode=self.audio_mode,
+                    sfx_mode=self.sfx_mode,
+                    sfx_volume=self.sfx_volume,
+                    blur_mode=self.blur_mode,
+                    blur_height=self.blur_height,
+                    mirror=self.mirror,
+                    audio_anti_copyright=self.audio_anti_copyright,
+                    render_video=self.render_video,
+                    stage_toggles=self.stage_toggles,
                 )
                 master.run_pipeline()
                 pipeline_status = getattr(master.state, "pipeline_status", "COMPLETED")

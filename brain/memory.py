@@ -63,6 +63,14 @@ class MovieState(BaseModel):
     outro_card: Optional[bool] = False  # When True, appends 3-second Pai AI Movie Studio outro card
     subtitles_burned: Optional[bool] = False  # Set to True when Myanmar ASS subtitles are burned onto video
     uploaded_video_name: Optional[str] = None  # Stores the GenAI file name (e.g. files/abc)
+    sfx_mode: Optional[str] = "original_sfx"  # "original_sfx" | "bgm" | "both" | "none"
+    sfx_volume: Optional[float] = 0.15  # 0.05 to 0.50 background volume level under voiceover
+    translation_style: Optional[str] = "recap"  # "recap" (Storyteller) | "dialogue" (1:1 Natural) | "persona" (Gender/Kinship)
+    audio_mode: Optional[str] = "ai_voiceover"  # "ai_voiceover" | "original" (100% Original Audio) | "none"
+    blur_mode: Optional[str] = "auto"  # "auto" | "yes" | "no"
+    blur_height: Optional[float] = None  # Custom blur height ratio
+    mirror: Optional[bool] = False  # Horizontal mirror for anti-copyright
+    audio_anti_copyright: Optional[bool] = False  # Subtle audio tempo perturbation (atempo=1.008)
 
     model_config = {"extra": "allow"}
     qa_results: Optional[Dict[str, Any]] = None  # Phase 7: QA Agent review results

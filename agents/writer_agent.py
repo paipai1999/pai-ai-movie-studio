@@ -3,8 +3,12 @@ import math
 import os
 import re
 from brain.memory import MovieState
-from brain.prompts import FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT, MOVIE_RECAP_STORYTELLER_SYSTEM_PROMPT
 from brain.gemini_client import call_gemini
+from brain.prompts import (
+    FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT,
+    MOVIE_RECAP_STORYTELLER_SYSTEM_PROMPT,
+    HARDSUB_BURMESE_TRANSLATION_SYSTEM_PROMPT,
+)
 from brain import config as cfg
 from brain.burmese_utils import (
     replace_numbers_with_burmese,
@@ -23,6 +27,19 @@ class WriterAgent:
         self.language = language
         self.max_blocks = max_blocks or (int(os.getenv("MAX_BLOCKS")) if os.getenv("MAX_BLOCKS") else None)
         self.script_engine = (script_engine or os.getenv("SCRIPT_ENGINE") or "recap").lower()
+
+    def get_system_prompt_for_style(self, style: str) -> str:
+        s = str(style or "").lower().strip()
+        if s in ["persona", "character", "kinship"]:
+            return HARDSUB_BURMESE_TRANSLATION_SYSTEM_PROMPT
+        elif s == "recap":
+            return MOVIE_RECAP_STORYTELLER_SYSTEM_PROMPT
+        else:
+            return FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT
+
+    def _get_system_prompt(self, state: MovieState) -> str:
+        active_style = getattr(state, "translation_style", None) or self.script_engine or "recap"
+        return self.get_system_prompt_for_style(active_style)
 
     # ─────────────────────────────────────────────────────
     # PUBLIC: generate_script (Full Movie Dialogue Translation / Movie Recap Storyteller)
@@ -256,7 +273,18 @@ class WriterAgent:
                     if b64_frame:
                         batch_images.append(b64_frame)
 
-            if self.script_engine == "recap":
+            active_style = getattr(state, "translation_style", None) or self.script_engine or "recap"
+            active_style = str(active_style).lower().strip()
+            if active_style in ["persona", "character", "kinship"]:
+                sys_prompt = HARDSUB_BURMESE_TRANSLATION_SYSTEM_PROMPT
+                batch_prompt = (
+                    f"Target Language: {self.language.upper()}\n"
+                    f"Movie Title: {state.movie_name}\n"
+                    f"Translate each dialogue line below with 100% faithful precision into colloquial {self.language.title()} enforcing strict Male (ကျနော်/ခင်ဗျာ), Female (ကျွန်မ/ရှင်), and Child (သား/သမီး) personas:\n"
+                    f"{json.dumps(batch, ensure_ascii=False, indent=2)}\n\n"
+                    f"Output a JSON array where each object has: id, narration, start_sec, end_sec, emotion, character, gender (\"male\" or \"female\")."
+                )
+            elif active_style == "recap":
                 sys_prompt = MOVIE_RECAP_STORYTELLER_SYSTEM_PROMPT
                 batch_prompt = (
                     f"Target Language: {self.language.upper()}\n"
@@ -319,11 +347,15 @@ class WriterAgent:
             # Ensure EVERY item in the batch is preserved with target language translation
             for seg in batch:
                 s_id = seg["id"]
-                if s_id in trans_map and trans_map[s_id].get("narration"):
+                if s_id in trans_map and (trans_map[s_id].get("narration") or trans_map[s_id].get("burmese") or trans_map[s_id].get("translation")):
                     item = trans_map[s_id]
-                    narration = str(item.get("narration", "")).strip()
+                    narration = str(item.get("narration") or item.get("burmese") or item.get("translation") or "").strip()
                     emotion = str(item.get("emotion", "normal")).strip()
-                    gender = str(item.get("gender", "male")).strip().lower()
+                    gender = str(item.get("gender") or item.get("speaker_gender") or "male").strip().lower()
+                    if gender in ["child", "boy"]:
+                        gender = "female" if "သမီး" in narration else "male"
+                    elif gender not in ["male", "female"]:
+                        gender = "male"
                     character = str(item.get("character", "Narrator")).strip()
                     if getattr(self, "language", "burmese").lower() in ["burmese", "mm", "myanmar"]:
                         try:

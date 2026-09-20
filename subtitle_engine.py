@@ -112,14 +112,41 @@ class SubtitleEngine:
         project_name: Optional[str] = None,
         source_language: str = "auto",
         force_whisper: bool = False,
+        translation_style: str = "dialogue",
+        audio_mode: str = "original",
+        sfx_mode: str = "original_sfx",
+        sfx_volume: float = 0.15,
+        render_video: bool = False,
+        video_format: str = "16:9",
+        resolution: str = "1080p",
+        subtitle_style: str = "box_black",
+        blur_mode: str = "auto",
+        mirror: bool = False,
+        color_grading: bool = True,
+        blur_height: Optional[float] = None,
+        audio_anti_copyright: bool = False,
+        stage_toggles: Optional[Dict] = None,
     ) -> Dict[str, str]:
         """Executes the complete subtitle & transcript generation pipeline."""
         start_time_all = time.time()
+
+        if stage_toggles:
+            if stage_toggles.get("render") is False:
+                render_video = False
+            elif stage_toggles.get("render") is True:
+                render_video = True
+            if stage_toggles.get("blur") is False:
+                blur_mode = "no"
+            if stage_toggles.get("reels") is False and video_format == "both":
+                video_format = "16:9"
+
         print("\n" + "=" * 65)
         print("🎬 [SUBTITLE ENGINE] YouTube Video to Burmese Subtitles & Transcripts")
         print(f"[*] Input: {input_source}")
         print(f"[*] Source Language: {source_language}")
         print(f"[*] Force Whisper STT: {force_whisper}")
+        print(f"[*] Translation Style: {translation_style}")
+        print(f"[*] Render Hardsub Video: {render_video}")
         print("=" * 65 + "\n")
 
         # ── Step 1: Download / Ingest Video & Subtitles ─────────────────────────
@@ -224,9 +251,8 @@ class SubtitleEngine:
 
         # ── Step 5: Dual-Nuance Narrative Burmese Subtitle Translation ──────────
         self._check_cancellation()
-        print("\n--- [Phase: Step 5 - Translating into Natural Storyteller Burmese Subtitles] ---")
-        print(f"[*] Translating {len(segments)} segments into Everyday Conversational Burmese (ရုပ်ရှင်/Anime ဇာတ်လမ်းပြန်ပြောဟန်)...")
-        self._translate_to_burmese(segments, source_lang=detected_lang)
+        print("\n--- [Phase: Step 5 - Translating into Natural Burmese Subtitles] ---")
+        self._translate_to_burmese(segments, source_lang=detected_lang, translation_style=translation_style)
 
         # ── Step 6: 1:1 Timestamp Alignment & Quality Check ────────────────────
         self._check_cancellation()
@@ -243,6 +269,36 @@ class SubtitleEngine:
         # ── Step 7: Export Deliverable Files ───────────────────────────────────
         print("\n--- [Phase: Step 7 - Writing Deliverable Files] ---")
         output_files = self._write_deliverable_files(proj_dir, segments, qc_report)
+
+        # ── Step 8: Optional Hardsub Video Render ─────────────────────────────
+        if render_video:
+            print("\n--- [Phase: Step 8 - Rendering Hardsub Video Output] ---")
+            try:
+                from hardsub_engine import HardsubEngine
+                hs = HardsubEngine(output_base_dir=self.output_base_dir, cookies_path=self.cookies_path, cancel_event=self.cancel_event)
+                hs_res = hs.run(
+                    input_source=final_video_path,
+                    project_name=os.path.basename(proj_dir),
+                    source_language=source_language,
+                    video_format=video_format,
+                    resolution=resolution,
+                    subtitle_style=subtitle_style,
+                    blur_mode=blur_mode,
+                    mirror=mirror,
+                    color_grading=color_grading,
+                    blur_height=blur_height,
+                    audio_anti_copyright=audio_anti_copyright,
+                    translation_style=translation_style,
+                    audio_mode=audio_mode,
+                    sfx_mode=sfx_mode,
+                    sfx_volume=sfx_volume,
+                    render_video=True,
+                )
+                if hs_res and hs_res.get("rendered_videos"):
+                    for k, v in hs_res["rendered_videos"].items():
+                        output_files[f"video_{k}"] = v
+            except Exception as e:
+                print(f"[WARN] SubtitleEngine: Hardsub video render notice: {e}")
 
         elapsed = time.time() - start_time_all
         m, s = divmod(int(elapsed), 60)
@@ -598,8 +654,8 @@ class SubtitleEngine:
         t = re.sub(r'[ \t]+', ' ', t).strip()
         return t
 
-    def _translate_to_burmese(self, segments: List[Dict], source_lang: str = "auto"):
-        """Translates segments into natural, everyday spoken Burmese subtitles in Movie/Anime Recap style."""
+    def _translate_to_burmese(self, segments: List[Dict], source_lang: str = "auto", translation_style: str = "dialogue"):
+        """Translates segments into natural spoken Burmese subtitles according to chosen translation style."""
         api_keys = self._get_api_keys()
         if not api_keys:
             print("[WARN] No Gemini API keys found. Copying English verbatim.")
@@ -612,11 +668,13 @@ class SubtitleEngine:
         recent_context: List[str] = []
 
         is_non_english = bool(source_lang and not source_lang.lower().startswith("en") and source_lang.lower() != "auto")
+        style = str(translation_style or "dialogue").lower().strip()
 
         for b_idx in range(total_batches):
             self._check_cancellation()
             chunk = segments[b_idx * batch_size : (b_idx + 1) * batch_size]
-            print(f"[*] Burmese Subtitles (Recap Style): Batch {b_idx + 1}/{total_batches} ({len(chunk)} lines)...")
+            style_label = "Persona Subtitles" if style in ["persona", "character", "kinship"] else ("Recap Storyteller Style" if style in ["recap", "storyteller"] else "1:1 Spoken Dialogue Subtitles")
+            print(f"[*] Burmese Subtitles ({style_label}): Batch {b_idx + 1}/{total_batches} ({len(chunk)} lines)...")
 
             # Prepare dual-nuance dialogue items
             dialogue_items = []
@@ -635,48 +693,49 @@ class SubtitleEngine:
                         "text": en_text or orig_text
                     })
 
-            system_prompt = (
-                "You are an elite Burmese Movie & Anime Recap Narrator and Subtitle Writer (မြန်မာ ရုပ်ရှင်နှင့် Anime ဇာတ်လမ်းပြန်ပြောဟန် စာတန်းထိုးပညာရှင်), "
-                "in the engaging, energetic, and natural style of top Myanmar anime/movie recap channels (like Shwe Zin / Anime Recaps Myanmar).\n\n"
-                "TASK:\n"
-                "Translate and adapt the input subtitle lines into a vibrant, natural, and entertaining Burmese Storyteller Recap Subtitle script (ဇာတ်လမ်းပြန်ပြောဟန် မြန်မာစာတန်းထိုး).\n\n"
-                "MANDATORY STYLE RULES:\n"
-                "1. EVERYDAY SPOKEN BURMESE (လက်တွေ့ နေ့စဉ်ဘဝသုံး စကားပြောဟန်):\n"
-                "   - Use authentic, lively spoken Burmese expressions used in real life.\n"
-                "   - Use natural colloquial phrasing, e.g.:\n"
-                "     * '... လိုပဲ ကွက်တိလိုက်ဖက်နေတာပေါ့'\n"
-                "     * '... လက်ထပ်ပေါင်းသင်းရမှာဖြစ်ပြီး'\n"
-                "     * '... ထင်းထိုင်ခွဲနေရတော့မယ်'\n"
-                "     * '... တကယ့် သနားစရာတွေပါပဲ'\n"
-                "     * '... အပိုင်နိုင်ဆုံးပေါ့'\n"
-                "     * '... ဝက်တောင် မစားတဲ့ အညစ်အကြေးတွေ'\n"
-                "     * '... ပါးစပ်ထဲက သွားရည်ကျလာကြပါပြီ'\n"
-                "     * '... စတင်လာခဲ့တာပေါ့'\n"
-                "   - Connect scenes with natural timing transitions: 'ဒီအချိန်မှာပဲ', 'ခဏအကြာမှာတော့', 'ဒါပေမဲ့', 'တကယ်တော့', 'နောက်ဆုံးမှာတော့', 'ဒီလိုနဲ့'.\n\n"
-                "2. STRICTLY NO QUOTATION MARKS (မျက်တောင်အဖွင့်/အပိတ် \"...\" များ လုံးဝ မထည့်ရ):\n"
-                "   - DO NOT include quotation marks (\" or “ or ” or ' or ‘ or ’) in the subtitle text.\n"
-                "   - Attribute dialogues naturally using colloquial spoken markers without quotes:\n"
-                "     * ... လို့ ပြောနေကြပါတယ်။\n"
-                "     * ... လို့ မေးတဲ့အခါ ... လို့ ပြန်ဖြေလိုက်ပါတယ်။\n"
-                "     * ... လို့ အော်ငေါက်ကြပါတယ်။\n"
-                "     * ... လို့ ပြောဆိုနေကြပါပြီ။\n\n"
-                "3. ABSOLUTELY NO BOOKISH / LITERARY WORDS (စာစကား လုံးဝ မသုံးရ):\n"
-                "   - Never use formal bookish words: 'သည်', '၍', 'သောကြောင့်', 'လျက်', 'ပြုလုပ်ပါသည်', 'ဖြစ်ပေသည်'.\n"
-                "   - Always use spoken endings: 'တယ်', 'ပြီးတော့', 'မို့လို့', 'တာပေါ့', 'နေတာပါ', 'ပါပြီ', 'ပါပဲ'.\n\n"
-                "4. SEAMLESS TIMESTAMPS FLOW:\n"
-                "   - Lines split across timestamps must flow as a natural, continuous sentence when read sequentially.\n\n"
-                "5. ACCURATE DRAMA & WEBNONVEL TROPES:\n"
-                "   - 罪臣之女 / 贬谪 -> ပြည်နှင်ဒဏ်ခံရတဲ့ မိသားစုက သမီးကြီး / ပြစ်ဒဏ်သင့်မိသားစုရဲ့ သမီး\n"
-                "   - 现代厨神 -> ခေတ်သစ်ကမ္ဘာက ထိပ်တန်းစားဖိုမှူးကြီး\n"
-                "   - 穿越 / 穿成 -> ကံကြမ္မာအလှည့်အပြောင်းကြောင့် ခန္ဓာကိုယ်ထဲ ကူးပြောင်းရောက်ရှိလာခဲ့တာ\n"
-                "   - 火头营 / 伙房 -> စစ်တပ်မီးဖိုဆောင်\n"
-                "   - 下水 / 羊杂 -> သိုးကလီစာ\n"
-                "   - 三沸 -> သုံးခါဆူအောင် ကျိုရတယ်\n\n"
-                "6. STRICT 1:1 ARRAY MAPPING:\n"
-                f"   - Return ONLY a valid JSON array of strings containing EXACTLY {len(chunk)} elements.\n"
-                "   - Array element i must strictly correspond to input line i.\n"
-                "   - Standard Myanmar Unicode spelling."
-            )
+            if style in ["persona", "character", "kinship"]:
+                system_prompt = (
+                    "You are an elite cinematic movie dialogue translator for Myanmar (Burmese).\n"
+                    "Translate each dialogue line with 100% faithful accuracy into colloquial spoken Myanmar.\n"
+                    "STRICTLY ENFORCE GENDER & KINSHIP PERSONAS:\n"
+                    "- Male speakers: 'ကျနော်/ခင်ဗျာ/တယ်ဗျ'\n"
+                    "- Female speakers: 'ကျွန်မ/ရှင်/ရှင့်/ပါရှင့်'\n"
+                    "- Child speakers to parents: 'သား' / 'သမီး'\n"
+                    "- Family kinship: Respectful terms ('ဖေဖေ', 'မေမေ', 'ဦးလေး')\n"
+                    f"Return ONLY a valid JSON array of strings containing EXACTLY {len(chunk)} elements matching input lines 1:1. NO quotation marks."
+                )
+            elif style in ["recap", "storyteller"]:
+                system_prompt = (
+                    "You are an elite Burmese Movie & Anime Recap Narrator and Subtitle Writer (မြန်မာ ရုပ်ရှင်နှင့် Anime ဇာတ်လမ်းပြန်ပြောဟန် စာတန်းထိုးပညာရှင်), "
+                    "in the engaging, energetic, and natural style of top Myanmar anime/movie recap channels (like Shwe Zin / Anime Recaps Myanmar).\n\n"
+                    "TASK:\n"
+                    "Translate and adapt the input subtitle lines into a vibrant, natural, and entertaining Burmese Storyteller Recap Subtitle script (ဇာတ်လမ်းပြန်ပြောဟန် မြန်မာစာတန်းထိုး).\n\n"
+                    "MANDATORY STYLE RULES:\n"
+                    "1. EVERYDAY SPOKEN BURMESE (လက်တွေ့ နေ့စဉ်ဘဝသုံး စကားပြောဟန်):\n"
+                    "   - Use authentic, lively spoken Burmese expressions used in real life.\n"
+                    "   - Connect scenes with natural timing transitions: 'ဒီအချိန်မှာပဲ', 'ခဏအကြာမှာတော့', 'ဒါပေမဲ့', 'တကယ်တော့', 'နောက်ဆုံးမှာတော့', 'ဒီလိုနဲ့'.\n\n"
+                    "2. STRICTLY NO QUOTATION MARKS (မျက်တောင်အဖွင့်/အပိတ် \"...\" များ လုံးဝ မထည့်ရ):\n"
+                    "   - DO NOT include quotation marks in the subtitle text.\n"
+                    "3. ABSOLUTELY NO BOOKISH / LITERARY WORDS (စာစကား လုံးဝ မသုံးရ):\n"
+                    "   - Always use spoken endings: 'တယ်', 'ပြီးတော့', 'မို့လို့', 'တာပေါ့', 'နေတာပါ', 'ပါပြီ', 'ပါပဲ'.\n\n"
+                    "4. SEAMLESS TIMESTAMPS FLOW:\n"
+                    "   - Lines split across timestamps must flow as a natural, continuous sentence when read sequentially.\n\n"
+                    "5. STRICT 1:1 ARRAY MAPPING:\n"
+                    f"   - Return ONLY a valid JSON array of strings containing EXACTLY {len(chunk)} elements.\n"
+                    "   - Standard Myanmar Unicode spelling."
+                )
+            else:
+                system_prompt = (
+                    "You are a professional film and TV subtitle localization specialist for Myanmar (Burmese).\n"
+                    "Translate the provided dialogue segments accurately into natural colloquial spoken Burmese (စကားပြောဟန် စာတန်းထိုး).\n\n"
+                    "CRITICAL REQUIREMENTS:\n"
+                    f"1. Return ONLY a valid JSON array of strings containing EXACTLY {len(chunk)} items.\n"
+                    "2. Item i in the output array MUST correspond strictly to item i in the input array.\n"
+                    "3. Do not merge, skip, or split any items.\n"
+                    "4. Everyday natural spoken Burmese (စကားပြောဟန်). NEVER use bookish formal particles (❌ သည်, ၌, ၍, မည်).\n"
+                    "5. STRICTLY NO QUOTATION MARKS (\" or ' or “ or ”). Attribution should be natural colloquial spoken.\n"
+                    "6. Keep character names, locations, and terminology consistent."
+                )
 
             context_str = ""
             if recent_context:

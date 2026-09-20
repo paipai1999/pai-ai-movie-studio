@@ -16,7 +16,7 @@ import urllib.request
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 from fastapi import FastAPI, Request, UploadFile, File, HTTPException, Query
 from fastapi.responses import HTMLResponse, FileResponse, PlainTextResponse, JSONResponse
@@ -322,6 +322,16 @@ def pipeline_worker(
     trim_end=None,
     no_smart_trim=False,
     outro_card=False,
+    translation_style="recap",
+    audio_mode="ai_voiceover",
+    sfx_mode="original_sfx",
+    sfx_volume=0.15,
+    blur_mode="auto",
+    blur_height=None,
+    mirror=False,
+    audio_anti_copyright=False,
+    render_video=True,
+    stage_toggles=None,
 ):
     current_job_id.set(job_id)
     cancel_events[job_id] = threading.Event()
@@ -423,6 +433,16 @@ def pipeline_worker(
             cancel_event=cancel_events.get(job_id),
             skip_demucs=skip_demucs,
             detect_scenes=detect_scenes,
+            translation_style=translation_style,
+            audio_mode=audio_mode,
+            sfx_mode=sfx_mode,
+            sfx_volume=sfx_volume,
+            blur_mode=blur_mode,
+            blur_height=blur_height,
+            mirror=mirror,
+            audio_anti_copyright=audio_anti_copyright,
+            render_video=render_video,
+            stage_toggles=stage_toggles,
         )
         master.run_pipeline()
         
@@ -476,6 +496,20 @@ def subtitle_worker(
     project_name=None,
     source_language="auto",
     force_whisper=False,
+    translation_style="dialogue",
+    audio_mode="original",
+    sfx_mode="original_sfx",
+    sfx_volume=0.15,
+    render_video=False,
+    video_format="16:9",
+    resolution="1080p",
+    subtitle_style="box_black",
+    blur_mode="auto",
+    mirror=False,
+    color_grading=True,
+    blur_height=None,
+    audio_anti_copyright=False,
+    stage_toggles=None,
 ):
     current_job_id.set(job_id)
     cancel_events[job_id] = threading.Event()
@@ -500,7 +534,21 @@ def subtitle_worker(
             input_source=input_source,
             project_name=project_name,
             source_language=source_language,
-            force_whisper=force_whisper
+            force_whisper=force_whisper,
+            translation_style=translation_style,
+            audio_mode=audio_mode,
+            sfx_mode=sfx_mode,
+            sfx_volume=sfx_volume,
+            render_video=render_video,
+            video_format=video_format,
+            resolution=resolution,
+            subtitle_style=subtitle_style,
+            blur_mode=blur_mode,
+            mirror=mirror,
+            color_grading=color_grading,
+            blur_height=blur_height,
+            audio_anti_copyright=audio_anti_copyright,
+            stage_toggles=stage_toggles,
         )
 
         job_cancel_ev = cancel_events.get(job_id)
@@ -561,6 +609,12 @@ def hardsub_worker(
     color_grading=True,
     blur_height=None,
     audio_anti_copyright=False,
+    translation_style="persona",
+    audio_mode="original",
+    sfx_mode="original_sfx",
+    sfx_volume=0.15,
+    render_video=True,
+    stage_toggles=None,
 ):
     current_job_id.set(job_id)
     cancel_events[job_id] = threading.Event()
@@ -594,6 +648,12 @@ def hardsub_worker(
             mirror=mirror,
             color_grading=color_grading,
             audio_anti_copyright=audio_anti_copyright,
+            translation_style=translation_style,
+            audio_mode=audio_mode,
+            sfx_mode=sfx_mode,
+            sfx_volume=sfx_volume,
+            render_video=render_video,
+            stage_toggles=stage_toggles,
         )
 
         job_cancel_ev = cancel_events.get(job_id)
@@ -668,6 +728,12 @@ def batch_worker(
     color_grading=True,
     audio_anti_copyright=False,
     force_whisper=False,
+    translation_style=None,
+    audio_mode=None,
+    sfx_mode="original_sfx",
+    sfx_volume=0.15,
+    render_video=True,
+    stage_toggles=None,
 ):
     from brain.planner import BatchProcessor
     current_job_id.set(job_id)
@@ -725,6 +791,12 @@ def batch_worker(
                         mirror=mirror,
                         color_grading=color_grading,
                         audio_anti_copyright=audio_anti_copyright,
+                        translation_style=translation_style or "persona",
+                        audio_mode=audio_mode or "original",
+                        sfx_mode=sfx_mode or "original_sfx",
+                        sfx_volume=sfx_volume,
+                        render_video=render_video if render_video is not None else True,
+                        stage_toggles=stage_toggles,
                     )
                 except Exception as item_err:
                     print(f"[ERROR] Batch item {idx} failed: {item_err}")
@@ -743,6 +815,20 @@ def batch_worker(
                         input_source=item,
                         source_language=source_language or "auto",
                         force_whisper=force_whisper,
+                        translation_style=translation_style or "dialogue",
+                        audio_mode=audio_mode or "original",
+                        sfx_mode=sfx_mode or "original_sfx",
+                        sfx_volume=sfx_volume,
+                        render_video=render_video if render_video is not None else False,
+                        video_format=video_format or "16:9",
+                        resolution=resolution or "1080p",
+                        subtitle_style=subtitle_style or "box_black",
+                        blur_mode=blur_mode or "auto",
+                        mirror=mirror,
+                        color_grading=color_grading,
+                        blur_height=blur_height,
+                        audio_anti_copyright=audio_anti_copyright,
+                        stage_toggles=stage_toggles,
                     )
                 except Exception as item_err:
                     print(f"[ERROR] Batch item {idx} failed: {item_err}")
@@ -801,6 +887,16 @@ def batch_worker(
                 cancel_event=cancel_events.get(job_id),
                 skip_demucs=skip_demucs,
                 detect_scenes=detect_scenes,
+                translation_style=translation_style or "recap",
+                audio_mode=audio_mode or "ai_voiceover",
+                sfx_mode=sfx_mode or "original_sfx",
+                sfx_volume=sfx_volume,
+                blur_mode=blur_mode,
+                blur_height=blur_height,
+                mirror=mirror,
+                audio_anti_copyright=audio_anti_copyright,
+                render_video=render_video if render_video is not None else True,
+                stage_toggles=stage_toggles,
             )
             print(f"[*] Batch Mode: Starting batch run for {len(inputs_list)} item(s)...")
             processor.process_all(url_list=urls, local_paths=local_paths)
@@ -881,6 +977,12 @@ class StartRequest(BaseModel):
     mirror: Optional[bool] = False
     color_grading: Optional[bool] = True
     audio_anti_copyright: Optional[bool] = False
+    translation_style: Optional[str] = "recap"
+    audio_mode: Optional[str] = "ai_voiceover"
+    sfx_mode: Optional[str] = "original_sfx"
+    sfx_volume: Optional[float] = 0.15
+    render_video: Optional[bool] = True
+    stage_toggles: Optional[Dict[str, bool]] = None
 
 class BatchStartRequest(BaseModel):
     inputs: List[str]
@@ -909,6 +1011,12 @@ class BatchStartRequest(BaseModel):
     mirror: Optional[bool] = False
     color_grading: Optional[bool] = True
     audio_anti_copyright: Optional[bool] = False
+    translation_style: Optional[str] = "recap"
+    audio_mode: Optional[str] = "ai_voiceover"
+    sfx_mode: Optional[str] = "original_sfx"
+    sfx_volume: Optional[float] = 0.15
+    render_video: Optional[bool] = True
+    stage_toggles: Optional[Dict[str, bool]] = None
 
 class SubtitleConfigRequest(BaseModel):
     preset: str = "box_black"
@@ -1309,6 +1417,12 @@ async def start_pipeline(req: StartRequest):
                 req.color_grading if req.color_grading is not None else True,
                 req.blur_height,
                 req.audio_anti_copyright or False,
+                req.translation_style or "persona",
+                req.audio_mode or "original",
+                req.sfx_mode or "original_sfx",
+                req.sfx_volume if req.sfx_volume is not None else 0.15,
+                req.render_video if req.render_video is not None else True,
+                req.stage_toggles,
             ),
             "name": str(req.project_name or input_source),
             "source": str(input_source),
@@ -1326,6 +1440,20 @@ async def start_pipeline(req: StartRequest):
                 req.project_name,
                 req.source_language or "auto",
                 req.force_whisper or False,
+                req.translation_style or "dialogue",
+                req.audio_mode or "original",
+                req.sfx_mode or "original_sfx",
+                req.sfx_volume if req.sfx_volume is not None else 0.15,
+                req.render_video if req.render_video is not None else False,
+                video_format,
+                resolution,
+                subtitle_style,
+                req.blur_mode or "auto",
+                req.mirror or False,
+                req.color_grading if req.color_grading is not None else True,
+                req.blur_height,
+                req.audio_anti_copyright or False,
+                req.stage_toggles,
             ),
             "name": str(req.project_name or input_source),
             "source": str(input_source),
@@ -1338,36 +1466,46 @@ async def start_pipeline(req: StartRequest):
             "job_id": job_id,
             "target": pipeline_worker,
             "args": (
-            job_id,
-            input_source,
-            language,
-            subtitle_mode,
-            resolution,
-            tts_engine,
-            custom_thumb_title,
-            watermark_enabled,
-            watermark_text,
-            watermark_opacity,
-            req.reels_enabled,
-            video_format,
-            subtitle_style,
-            req.thumbnail_intro,
-            req.source_language or "auto",
-            req.skip_demucs or False,
-            req.detect_scenes or False,
-            req.resume if req.resume is not None else True,
-            req.tts_voice,
-            req.script_engine or "recap",
-            req.trim_end,
-            req.no_smart_trim or False,
-            req.outro_card or False,
-        ),
-        "name": str(input_source),
-        "source": str(input_source),
-        "language": str(language),
-        "tts_engine": str(tts_engine or "edge_tts"),
-        "created_at": time.time()
-    }
+                job_id,
+                input_source,
+                language,
+                subtitle_mode,
+                resolution,
+                tts_engine,
+                custom_thumb_title,
+                watermark_enabled,
+                watermark_text,
+                watermark_opacity,
+                req.reels_enabled,
+                video_format,
+                subtitle_style,
+                req.thumbnail_intro,
+                req.source_language or "auto",
+                req.skip_demucs or False,
+                req.detect_scenes or False,
+                req.resume if req.resume is not None else True,
+                req.tts_voice,
+                req.script_engine or "recap",
+                req.trim_end,
+                req.no_smart_trim or False,
+                req.outro_card or False,
+                req.translation_style or "recap",
+                req.audio_mode or "ai_voiceover",
+                req.sfx_mode or "original_sfx",
+                req.sfx_volume if req.sfx_volume is not None else 0.15,
+                req.blur_mode or "auto",
+                req.blur_height,
+                req.mirror or False,
+                req.audio_anti_copyright or False,
+                req.render_video if req.render_video is not None else True,
+                req.stage_toggles,
+            ),
+            "name": str(input_source),
+            "source": str(input_source),
+            "language": str(language),
+            "tts_engine": str(tts_engine or "edge_tts"),
+            "created_at": time.time()
+        }
 
     with queue_lock:
         if not is_running:
@@ -1449,6 +1587,12 @@ async def start_batch_pipeline(req: BatchStartRequest):
             req.color_grading if req.color_grading is not None else True,
             req.audio_anti_copyright or False,
             req.force_whisper or False,
+            req.translation_style,
+            req.audio_mode,
+            req.sfx_mode or "original_sfx",
+            req.sfx_volume if req.sfx_volume is not None else 0.15,
+            req.render_video if req.render_video is not None else True,
+            req.stage_toggles,
         ),
         "name": f"Batch [{req.engine_mode.upper() if req.engine_mode else 'RECAP'}] ({len(inputs)} items)",
         "source": f"Batch ({len(inputs)} items)",

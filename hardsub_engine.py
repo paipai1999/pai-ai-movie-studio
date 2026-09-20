@@ -32,7 +32,11 @@ if PROJECT_ROOT not in sys.path:
 
 import brain.config as cfg
 from brain.gemini_client import call_gemini
-from brain.prompts import HARDSUB_BURMESE_TRANSLATION_SYSTEM_PROMPT
+from brain.prompts import (
+    HARDSUB_BURMESE_TRANSLATION_SYSTEM_PROMPT,
+    FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT,
+    MOVIE_RECAP_STORYTELLER_SYSTEM_PROMPT,
+)
 from brain.burmese_utils import (
     replace_numbers_with_burmese,
     transliterate_english_acronyms,
@@ -384,10 +388,21 @@ class HardsubEngine:
     # ─────────────────────────────────────────────────────────────────────────
     # Step 3: Gender/Age-Aware & Faithful 1:1 Burmese Translation (Gemini)
     # ─────────────────────────────────────────────────────────────────────────
-    def _translate_dialogue(self, segments: List[Dict], source_language: str = "auto") -> List[Dict]:
+    def _translate_dialogue(self, segments: List[Dict], source_language: str = "auto", translation_style: str = "persona") -> List[Dict]:
         self._check_cancellation()
+        style = str(translation_style or "persona").lower().strip()
+        if style in ["recap", "storyteller"]:
+            chosen_sys = MOVIE_RECAP_STORYTELLER_SYSTEM_PROMPT
+            style_label = "Recap Storyteller Style"
+        elif style in ["dialogue", "1:1", "translate"]:
+            chosen_sys = FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT
+            style_label = "1:1 Spoken Dialogue Subtitles"
+        else:
+            chosen_sys = HARDSUB_BURMESE_TRANSLATION_SYSTEM_PROMPT
+            style_label = "Gender/Age Persona Precision"
+
         print("\n" + "=" * 65)
-        print("▶ STEP 3: Faithful 1:1 Translation (Gender/Age Persona Precision)")
+        print(f"▶ STEP 3: Faithful Translation ({style_label})")
         print("=" * 65)
 
         api_keys = self.config_data.get("gemini", {}).get("api_keys", [])
@@ -413,7 +428,7 @@ class HardsubEngine:
             self._check_cancellation()
             chunk = segments[b_idx * batch_size : (b_idx + 1) * batch_size]
             prompt_items = [{"id": s["id"], "original": s["original"]} for s in chunk]
-            print(f"[*] Translating Batch {b_idx + 1}/{total_batches} ({len(chunk)} lines with Male/Female/Child personas)...")
+            print(f"[*] Translating Batch {b_idx + 1}/{total_batches} ({len(chunk)} lines with {style_label})...")
 
             user_prompt = (
                 f"Source Language: {source_language}\n"
@@ -426,7 +441,7 @@ class HardsubEngine:
             for retry in range(2):
                 try:
                     raw_resp, _ = call_gemini(
-                        system_prompt=HARDSUB_BURMESE_TRANSLATION_SYSTEM_PROMPT,
+                        system_prompt=chosen_sys,
                         user_prompt=user_prompt,
                         api_key=api_keys,
                         model=gemini_model,
@@ -923,6 +938,12 @@ class HardsubEngine:
         color_grading: bool = True,
         blur_height: Optional[float] = None,
         audio_anti_copyright: bool = False,
+        translation_style: str = "persona",
+        audio_mode: str = "original",
+        sfx_mode: str = "original_sfx",
+        sfx_volume: float = 0.15,
+        render_video: bool = True,
+        stage_toggles: Optional[Dict] = None,
     ) -> Dict:
         start_time = time.time()
         safe_id = _get_safe_ascii_id(project_name or input_source, prefix="proj")
@@ -930,9 +951,17 @@ class HardsubEngine:
         project_dir = os.path.join(self.output_base_dir, clean_proj_name)
         os.makedirs(project_dir, exist_ok=True)
 
+        if stage_toggles:
+            if stage_toggles.get("render") is False:
+                render_video = False
+            if stage_toggles.get("blur") is False:
+                blur_mode = "no"
+            if stage_toggles.get("reels") is False and video_format == "both":
+                video_format = "16:9"
+
         print(f"\n🚀 HardsubEngine: Initializing '{clean_proj_name}'...")
         anti_note = " + Audio Shield (atempo=1.008)" if audio_anti_copyright else ""
-        print(f"   Format: {video_format.upper()} | Res: {resolution.upper()} | Style: {subtitle_style} | Blur: {blur_mode}{anti_note}")
+        print(f"   Format: {video_format.upper()} | Res: {resolution.upper()} | Style: {subtitle_style} | Blur: {blur_mode} | Trans: {translation_style}{anti_note}")
 
         # Step 1: Ingest video
         video_file, sub_file, title, video_meta = self._ingest_video(input_source, project_dir, force_whisper)
@@ -940,7 +969,7 @@ class HardsubEngine:
         # Step 2: Extract transcript
         segments, extractor_type = self._extract_transcript(video_file, sub_file, source_language)
 
-        # Step 3: Translate with gender/age precision
+        # Step 3: Translate with selected translation style
         cached_records = os.path.join(project_dir, "records_data.json")
         reused_cached = False
         if os.path.exists(cached_records) and os.path.getsize(cached_records) > 1000:
@@ -957,7 +986,7 @@ class HardsubEngine:
             except Exception as e:
                 print(f"[WARN] Failed to load cached records: {e}")
         if not reused_cached:
-            segments = self._translate_dialogue(segments, source_language)
+            segments = self._translate_dialogue(segments, source_language, translation_style=translation_style)
 
         # Step 4: Detect blur region
         blur_info = self._detect_subtitle_blur_region(video_file, blur_mode, custom_blur_height=blur_height)
@@ -987,7 +1016,24 @@ class HardsubEngine:
             margin_bottom=ass_margin_v,
         )
 
-        # Step 6: Render Hardsub Videos
+        # Step 6: Render Hardsub Videos (if render_video is True)
+        if not render_video:
+            print("\n[*] Video rendering skipped (render_video=False). Exporting standalone subtitles and audit reports.")
+            self._export_reports(project_dir, title, segments, video_meta, extractor_type, ass_path=ass_path)
+            if ass_path and os.path.exists(ass_path):
+                try:
+                    os.remove(ass_path)
+                except Exception:
+                    pass
+            elapsed = time.time() - start_time
+            return {
+                "status": "completed",
+                "project_dir": project_dir,
+                "rendered_videos": {},
+                "duration_sec": elapsed,
+                "total_records": len(segments),
+            }
+
         rendered_outputs = {}
         formats_to_render = ["16:9", "9:16"] if video_format == "both" else [video_format]
 
