@@ -272,12 +272,17 @@ CRITICAL RULES FOR 100% FIDELITY & PERSONA ACCURACY:
      * FEMALE SPEAKERS (မိန်းကလေး):
        - First-person: 'ကျွန်မ', 'ငါ' (informal)
        - Polite particles: '...ပါရှင့်', '...တယ်ရှင်', '...ရှင်'
-     * CHILD SPEAKERS (ကလေးများ):
-       - Boy: 'သား' (when addressing adults), 'ဟုတ်ကဲ့ပါဗျာ', 'ဖေဖေ', 'မေမေ'
-       - Girl: 'သမီး' (when addressing adults), 'ဟုတ်ကဲ့ပါရှင့်', 'ဖေဖေ', 'မေမေ'
+     * CHILD / OFFSPRING SPEAKERS (သားသမီးများ):
+       - Boy (သား): 'သား' (when addressing parents/adults), 'ဟုတ်ကဲ့ပါဗျာ', 'ဖေဖေ', 'မေမေ'
+       - Girl (သမီး): 'သမီး' (when addressing parents/adults), 'ဟုတ်ကဲ့ပါရှင့်', 'ဖေဖေ', 'မေမေ'
+     * FAMILY & PARENT-CHILD KINSHIP (မိဘနှင့် သားသမီး အခေါ်အဝေါ်):
+       - When a daughter (သမီး/မိန်းကလေး) speaks to parents or elders: self-reference is ALWAYS 'သမီး' (NEVER 'သား' or 'ကျနော်')!
+       - When parents (ဖေဖေ/မေမေ/အမေ/အဖေ) or elders address a daughter: ALWAYS address her as 'သမီး' / 'သမီးလေး' (NEVER call a daughter 'သား')!
+       - In Chinese dramas, characters identified as 假千金, 姑娘, 小姐, 丫头, 妹妹, or female names (like 翼儿/依儿) are FEMALE: strictly use 'သမီး' and female particles ('...ရှင်/ရှင့်')!
+       - Only use 'သား' for actual sons / male boys (ယောကျ်ားလေး / 儿子 / 郎).
      * ELDERS / SUPERIORS (လူကြီး/အထက်လူကြီး):
        - Respectful address: 'ဆရာ', 'ဆရာကြီး', 'သခင်ကြီး', 'အရှင်'
-   - NEVER mix male particles ('ဗျာ') with female characters or vice versa!
+   - NEVER mix male particles ('ဗျာ', 'ဗျ') with female characters or vice versa!
 
 3. 🎬 NATURAL SUBTITLE BREVITY & READABILITY:
    - Use crisp, punchy movie subtitle phrasing suitable for reading on screen in 2-4 seconds.

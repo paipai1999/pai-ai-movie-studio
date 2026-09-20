@@ -135,33 +135,46 @@ class HardsubEngine:
 
         if self.is_url(input_source):
             print(f"[*] Input is URL -> {input_source}")
-            temp_dl_dir = os.path.join(project_dir, "temp_dl")
-            os.makedirs(temp_dl_dir, exist_ok=True)
-
-            dl = DownloaderAgent(output_dir=temp_dl_dir)
-            video_file = dl.download_video(input_source)
-            title = os.path.splitext(os.path.basename(video_file))[0]
-
-            if not force_whisper:
-                sub_file = self._try_extract_youtube_subs(input_source, temp_dl_dir)
-
             dest_video = os.path.join(project_dir, "01_video_original.mp4")
-            try:
-                shutil.copy2(video_file, dest_video)
-                video_file = dest_video
-            except Exception:
-                pass
+            dest_sub = None
+            for ext in [".vtt", ".srt", ".ass"]:
+                cand_sub = os.path.join(project_dir, "01_extracted_sub" + ext)
+                if os.path.exists(cand_sub) and os.path.getsize(cand_sub) > 100:
+                    dest_sub = cand_sub
+                    break
 
-            if sub_file and os.path.exists(sub_file):
-                dest_sub = os.path.join(project_dir, "01_extracted_sub" + os.path.splitext(sub_file)[1])
+            if os.path.exists(dest_video) and os.path.getsize(dest_video) > 1000000:
+                print(f"[*] Found pre-downloaded video in project directory -> {os.path.basename(dest_video)}")
+                video_file = dest_video
+                title = os.path.splitext(os.path.basename(video_file))[0]
+                sub_file = dest_sub
+            else:
+                temp_dl_dir = os.path.join(project_dir, "temp_dl")
+                os.makedirs(temp_dl_dir, exist_ok=True)
+
+                dl = DownloaderAgent(output_dir=temp_dl_dir)
+                video_file = dl.download_video(input_source)
+                title = os.path.splitext(os.path.basename(video_file))[0]
+
+                if not force_whisper:
+                    sub_file = self._try_extract_youtube_subs(input_source, temp_dl_dir)
+
                 try:
-                    shutil.copy2(sub_file, dest_sub)
-                    sub_file = dest_sub
+                    shutil.copy2(video_file, dest_video)
+                    video_file = dest_video
                 except Exception:
                     pass
 
-            # Clean up temp download directory to prevent storage buildup
-            shutil.rmtree(temp_dl_dir, ignore_errors=True)
+                if sub_file and os.path.exists(sub_file):
+                    dest_sub = os.path.join(project_dir, "01_extracted_sub" + os.path.splitext(sub_file)[1])
+                    try:
+                        shutil.copy2(sub_file, dest_sub)
+                        sub_file = dest_sub
+                    except Exception:
+                        pass
+
+                # Clean up temp download directory to prevent storage buildup
+                shutil.rmtree(temp_dl_dir, ignore_errors=True)
         else:
             local_path = os.path.abspath(input_source)
             if not os.path.exists(local_path):
@@ -216,7 +229,7 @@ class HardsubEngine:
                 "skip_download": True,
                 "writesubtitles": True,
                 "writeautomaticsub": True,
-                "subtitleslangs": ["en", "zh", "ja", "ko", "th", "all"],
+                "subtitleslangs": ["zh-Hans", "zh-Hant", "zh", "en", "ja", "ko", "th"],
                 "subtitlesformat": "srt/vtt/best",
                 "outtmpl": os.path.join(temp_dir, "sub_%(id)s.%(ext)s"),
                 "quiet": True,
@@ -338,7 +351,7 @@ class HardsubEngine:
         model = WhisperModel(model_size, device="auto", compute_type="default")
 
         lang = None if source_language in ["auto", "", None] else source_language
-        whisper_segs, _ = model.transcribe(temp_audio, language=lang, beam_size=5, vad_filter=True)
+        whisper_segs, _ = model.transcribe(temp_audio, language=lang, beam_size=1, vad_filter=True)
 
         results = []
         for s in whisper_segs:
@@ -549,7 +562,7 @@ class HardsubEngine:
         border_style = p_data.get("border_style", 3)
         outline_w = p_data.get("outline_width", 4)
         shadow = p_data.get("shadow", 2)
-        font_name = "Myanmar Text" if sys.platform == "win32" else "Padauk"
+        font_name = "Padauk"
 
         header = (
             "[Script Info]\n"
@@ -623,7 +636,14 @@ class HardsubEngine:
         enc_info = detect_hardware_encoder()
         codec = enc_info.get("codec", "libx264")
         preset = enc_info.get("preset", "medium")
-        quality_args = enc_info.get("quality_args", ["-crf", "20"])
+        if codec == "h264_qsv":
+            quality_args = ["-global_quality", "23"]
+        elif codec == "h264_nvenc":
+            quality_args = ["-cq", "22"]
+        elif codec == "h264_amf":
+            quality_args = ["-qp_p", "22", "-qp_i", "22"]
+        else:
+            quality_args = enc_info.get("quality_args", ["-crf", "21"])
 
         # Target dimensions
         if aspect_ratio == "9:16":
@@ -635,7 +655,8 @@ class HardsubEngine:
         ass_dir = os.path.dirname(os.path.abspath(ass_path))
         ass_fname = os.path.basename(ass_path)
         safe_ass_fname = ass_fname.replace("\\", "/").replace("'", r"\'").replace(":", r"\:")
-        ass_filter_str = f"subtitles='{safe_ass_fname}'"
+        fonts_dir = os.path.abspath("assets/fonts").replace("\\", "/").replace("'", r"\'").replace(":", r"\:")
+        ass_filter_str = f"ass=filename='{safe_ass_fname}':shaping=1:fontsdir='{fonts_dir}'"
 
         # Build filter chains
         v_filters = []
@@ -706,7 +727,15 @@ class HardsubEngine:
             os.path.abspath(output_path),
         ]
 
-        print(f"[*] Rendering with {codec} ({preset})...")
+        dur_sec = 0.0
+        try:
+            meta = self._probe_video_metadata(video_path)
+            dur_sec = float(meta.get("duration") or 0.0)
+        except Exception:
+            pass
+        render_timeout = max(3600, int((dur_sec or 1800.0) * 4.0))
+
+        print(f"[*] Rendering with {codec} ({preset}) (timeout={render_timeout}s)...")
         try:
             res = subprocess.run(
                 cmd,
@@ -715,42 +744,61 @@ class HardsubEngine:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                timeout=1800,
+                timeout=render_timeout,
             )
             if res.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
                 print(f"🚀 [OK] Hardsub video render COMPLETE -> {os.path.basename(output_path)}")
                 return True
             else:
-                print("[WARN] Hardware render failed. Retrying with CPU libx264...")
-                fallback_cmd = [
-                    self.ffmpeg_bin, "-y",
-                    "-i", os.path.abspath(video_path),
-                    "-filter_complex", filter_complex,
-                    "-map", "[vout]",
-                    "-map", audio_map,
-                    "-c:v", "libx264",
-                    "-preset", "veryfast",
-                    "-crf", "21",
-                    "-pix_fmt", "yuv420p",
-                    "-c:a", "aac",
-                    "-b:a", "192k",
-                    "-movflags", "+faststart",
-                    os.path.abspath(output_path),
-                ]
-                res_cpu = subprocess.run(
-                    fallback_cmd,
-                    cwd=ass_dir,
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    timeout=1800,
-                )
-                if res_cpu.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
-                    print(f"🚀 [OK] Hardsub CPU render COMPLETE -> {os.path.basename(output_path)}")
-                    return True
+                print(f"[WARN] Hardware render failed (exit code {res.returncode}). Retrying with CPU libx264...")
         except Exception as e:
-            print(f"[ERROR] Hardsub render error: {e}")
+            print(f"[WARN] Hardware render error: {e}. Retrying with CPU libx264...")
+
+        # If hardware render failed or timed out, clean up incomplete output file before fallback
+        if os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except Exception:
+                pass
+
+        try:
+            fallback_cmd = [
+                self.ffmpeg_bin, "-y",
+                "-i", os.path.abspath(video_path),
+                "-filter_complex", filter_complex,
+                "-map", "[vout]",
+                "-map", audio_map,
+                "-c:v", "libx264",
+                "-preset", "veryfast",
+                "-crf", "21",
+                "-pix_fmt", "yuv420p",
+                "-c:a", "aac",
+                "-b:a", "192k",
+                "-movflags", "+faststart",
+                os.path.abspath(output_path),
+            ]
+            res_cpu = subprocess.run(
+                fallback_cmd,
+                cwd=ass_dir,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=render_timeout,
+            )
+            if res_cpu.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+                print(f"🚀 [OK] Hardsub CPU render COMPLETE -> {os.path.basename(output_path)}")
+                return True
+            else:
+                print(f"[ERROR] CPU render failed (exit code {res_cpu.returncode}).")
+        except Exception as e_cpu:
+            print(f"[ERROR] Hardsub CPU render error: {e_cpu}")
+
+        if os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except Exception:
+                pass
         return False
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -875,7 +923,23 @@ class HardsubEngine:
         segments, extractor_type = self._extract_transcript(video_file, sub_file, source_language)
 
         # Step 3: Translate with gender/age precision
-        segments = self._translate_dialogue(segments, source_language)
+        cached_records = os.path.join(project_dir, "records_data.json")
+        reused_cached = False
+        if os.path.exists(cached_records) and os.path.getsize(cached_records) > 1000:
+            try:
+                with open(cached_records, "r", encoding="utf-8") as rf:
+                    cached_data = json.load(rf)
+                if isinstance(cached_data, list) and len(cached_data) == len(segments) and all("burmese" in s for s in cached_data):
+                    print(f"[OK] Found pre-translated records ({len(cached_data)} segments) in project folder -> Reusing cached Burmese translations.", flush=True)
+                    for s in cached_data:
+                        if not s.get("burmese"):
+                            s["burmese"] = s.get("original", "")
+                    segments = cached_data
+                    reused_cached = True
+            except Exception as e:
+                print(f"[WARN] Failed to load cached records: {e}")
+        if not reused_cached:
+            segments = self._translate_dialogue(segments, source_language)
 
         # Step 4: Detect blur region
         blur_info = self._detect_subtitle_blur_region(video_file, blur_mode, custom_blur_height=blur_height)
@@ -885,12 +949,24 @@ class HardsubEngine:
         os.makedirs(temp_dir, exist_ok=True)
         safe_ass_id = _get_safe_ascii_id(title, prefix="ass")
         ass_path = os.path.join(temp_dir, f"sub_{safe_ass_id}.ass")
+        # Match ASS PlayRes canvas to target output resolution
+        if resolution == "720p":
+            ass_w, ass_h = (720, 1280) if video_format == "9:16" else (1280, 720)
+            ass_font_size = 36
+            ass_margin_v = 40
+        else:
+            ass_w, ass_h = (1080, 1920) if video_format == "9:16" else (1920, 1080)
+            ass_font_size = 48
+            ass_margin_v = 55
+
         self._generate_ass_file(
             segments,
             ass_path,
-            video_w=video_meta.get("width", 1920),
-            video_h=video_meta.get("height", 1080),
+            video_w=ass_w,
+            video_h=ass_h,
             preset=subtitle_style,
+            font_size=ass_font_size,
+            margin_bottom=ass_margin_v,
         )
 
         # Step 6: Render Hardsub Videos
@@ -925,6 +1001,20 @@ class HardsubEngine:
                 pass
 
         elapsed = time.time() - start_time
+        if not rendered_outputs:
+            print("\n" + "=" * 65)
+            print("❌ HardsubEngine FAILED: No videos could be rendered successfully.")
+            print(f"📁 Project Folder: {project_dir}")
+            print("=" * 65 + "\n")
+            return {
+                "status": "failed",
+                "error": "Hardsub video rendering failed",
+                "project_dir": project_dir,
+                "rendered_videos": {},
+                "duration_sec": elapsed,
+                "total_records": len(segments),
+            }
+
         print("\n" + "=" * 65)
         print(f"🎉 HardsubEngine COMPLETED in {elapsed:.1f}s!")
         print(f"📁 Project Folder: {project_dir}")
@@ -955,7 +1045,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     engine = HardsubEngine()
-    engine.run(
+    result = engine.run(
         input_source=args.input,
         video_format=args.format,
         resolution=args.res,
@@ -966,3 +1056,5 @@ if __name__ == "__main__":
         audio_anti_copyright=args.audio_anti_copyright,
         source_language=args.lang,
     )
+    if isinstance(result, dict) and result.get("status") == "failed":
+        sys.exit(1)
