@@ -7,7 +7,7 @@ import sys
 import unittest
 import tempfile
 import shutil
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 # Add project root to sys.path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -307,6 +307,31 @@ class TestHardsubEngine(unittest.TestCase):
         called_cmd = mock_run.call_args[0][0]
         cmd_str = " ".join(called_cmd)
         self.assertIn(r"sub\'test\:special.ass", cmd_str)
+
+    @patch("subprocess.run")
+    def test_render_hardsub_muted_video_no_audio_shield(self, mock_run):
+        """Test that a muted video (has_video=True, has_audio=False) skips atempo audio filter even if audio_anti_copyright=True."""
+        mock_run.return_value = MagicMock(returncode=0, stderr="Stream #0:0: Video: h264")
+        video_in = os.path.join(self.temp_dir, "muted.mp4")
+        video_out = os.path.join(self.temp_dir, "out_muted.mp4")
+        ass_path = os.path.join(self.temp_dir, "sub.ass")
+        for p in [video_in, ass_path]:
+            with open(p, "w", encoding="utf-8") as f:
+                f.write("content")
+
+        self.engine._render_hardsub_video(
+            video_path=video_in,
+            output_path=video_out,
+            ass_path=ass_path,
+            blur_info=(0.8, 0.2, False),
+            aspect_ratio="16:9",
+            resolution="1080p",
+            audio_anti_copyright=True
+        )
+        called_cmd = mock_run.call_args[0][0]
+        cmd_str = " ".join(called_cmd)
+        self.assertNotIn("atempo=1.008", cmd_str)
+        self.assertIn("-map 0:a?", cmd_str)
 
 
 if __name__ == "__main__":

@@ -419,18 +419,21 @@ class SubtitleEngine:
         temp_audio = os.path.abspath(os.path.join("temp", f"stt_audio_{os.getpid()}_{int(time.time() * 1000)}.wav"))
         os.makedirs(os.path.dirname(temp_audio), exist_ok=True)
 
-        # Extract 16kHz mono WAV for Whisper
-        cmd = [
-            self.ffmpeg_bin, "-y", "-i", video_path,
-            "-vn", "-ac", "1", "-ar", "16000",
-            temp_audio
-        ]
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-        whisper_lang = None if language in ["auto", "", None] else language
-
         results = []
         try:
+            # Extract 16kHz mono WAV for Whisper
+            cmd = [
+                self.ffmpeg_bin, "-y", "-i", video_path,
+                "-vn", "-ac", "1", "-ar", "16000",
+                temp_audio
+            ]
+            res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if res.returncode != 0 or not os.path.exists(temp_audio) or os.path.getsize(temp_audio) == 0:
+                print(f"[WARN] Audio extraction failed (video may have no audio track): {video_path}")
+                return []
+
+            whisper_lang = None if language in ["auto", "", None] else language
+
             from faster_whisper import WhisperModel
             model = WhisperModel("base", device="cpu", compute_type="int8", cpu_threads=min(8, os.cpu_count() or 4))
             seg_gen, info = model.transcribe(

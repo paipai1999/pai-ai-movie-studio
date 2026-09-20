@@ -199,6 +199,7 @@ class HardsubEngine:
 
     def _probe_video_metadata(self, video_path: str) -> dict:
         dur, fps, w, h = 0.0, 30.0, 1920, 1080
+        has_audio = True
         try:
             cmd = [self.ffmpeg_bin, "-i", video_path, "-hide_banner"]
             res = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL, text=True, errors="replace")
@@ -211,8 +212,16 @@ class HardsubEngine:
             if wh_match:
                 w = int(wh_match.group(1))
                 h = int(wh_match.group(2))
+            has_video_stream = bool(re.search(r"Stream #\d+:\d+.*Video:", err))
+            has_audio_stream = bool(re.search(r"Stream #\d+:\d+.*Audio:", err))
+            if has_video_stream and not has_audio_stream:
+                has_audio = False
+            elif has_audio_stream:
+                has_audio = True
+            else:
+                has_audio = True
         except Exception:
-            pass
+            has_audio = True
 
         return {
             "title": os.path.splitext(os.path.basename(video_path))[0],
@@ -220,6 +229,7 @@ class HardsubEngine:
             "fps": fps,
             "width": w,
             "height": h,
+            "has_audio": has_audio,
         }
 
     def _try_extract_youtube_subs(self, url: str, temp_dir: str) -> Optional[str]:
@@ -332,39 +342,44 @@ class HardsubEngine:
 
     def _transcribe_with_whisper(self, video_path: str, source_language: str = "auto") -> List[Dict]:
         self._check_cancellation()
-        # Extract audio to temp 16kHz mono WAV for Whisper
-        temp_audio = os.path.join(os.path.dirname(video_path), "temp_whisper.wav")
+        # Extract audio to temp 16kHz mono WAV for Whisper with process-safe unique name
+        temp_audio = os.path.abspath(os.path.join("temp", f"hardsub_stt_{os.getpid()}_{int(time.time() * 1000)}.wav"))
+        os.makedirs(os.path.dirname(temp_audio), exist_ok=True)
+        extracted = False
         try:
             cmd = [
                 self.ffmpeg_bin, "-y", "-i", video_path,
                 "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
                 temp_audio
             ]
-            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-        except Exception as e:
-            print(f"[WARN] Audio extraction failed: {e}")
-            temp_audio = video_path
+            res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if res.returncode == 0 and os.path.exists(temp_audio) and os.path.getsize(temp_audio) > 100:
+                extracted = True
+                audio_target = temp_audio
+            else:
+                print("[WARN] Audio extraction produced empty file or failed. Attempting direct file inspection...")
+                audio_target = video_path
 
-        from faster_whisper import WhisperModel
-        model_size = self.config_data.get("pipeline", {}).get("whisper_model", "base")
-        print(f"[*] Loading Faster-Whisper ({model_size}) on CPU/auto...")
-        model = WhisperModel(model_size, device="auto", compute_type="default")
+            from faster_whisper import WhisperModel
+            model_size = self.config_data.get("pipeline", {}).get("whisper_model", "base")
+            print(f"[*] Loading Faster-Whisper ({model_size}) on CPU/auto...")
+            model = WhisperModel(model_size, device="auto", compute_type="default")
 
-        lang = None if source_language in ["auto", "", None] else source_language
-        whisper_segs, _ = model.transcribe(temp_audio, language=lang, beam_size=1, vad_filter=True)
+            lang = None if source_language in ["auto", "", None] else source_language
+            whisper_segs, _ = model.transcribe(audio_target, language=lang, beam_size=1, vad_filter=True)
 
-        results = []
-        for s in whisper_segs:
-            txt = s.text.strip()
-            if txt and s.end > s.start:
-                results.append({"start": s.start, "end": s.end, "text": txt})
-
-        if os.path.exists(temp_audio) and temp_audio != video_path:
-            try:
-                os.remove(temp_audio)
-            except Exception:
-                pass
-        return results
+            results = []
+            for s in whisper_segs:
+                txt = s.text.strip()
+                if txt and s.end > s.start:
+                    results.append({"start": s.start, "end": s.end, "text": txt})
+            return results
+        finally:
+            if extracted and os.path.exists(temp_audio):
+                try:
+                    os.remove(temp_audio)
+                except Exception:
+                    pass
 
     # ─────────────────────────────────────────────────────────────────────────
     # Step 3: Gender/Age-Aware & Faithful 1:1 Burmese Translation (Gemini)
@@ -706,8 +721,19 @@ class HardsubEngine:
                 f"[combined]{ass_filter_str}[vout]"
             )
 
+        meta = {}
+        dur_sec = 0.0
+        has_audio = True
+        try:
+            meta = self._probe_video_metadata(video_path)
+            dur_sec = float(meta.get("duration") or 0.0)
+            has_audio = bool(meta.get("has_audio", True))
+        except Exception:
+            pass
+        render_timeout = max(3600, int((dur_sec or 1800.0) * 4.0))
+
         audio_map = "0:a?"
-        if audio_anti_copyright:
+        if audio_anti_copyright and has_audio:
             filter_complex += ";[0:a]atempo=1.008[aout]"
             audio_map = "[aout]"
 
@@ -726,14 +752,6 @@ class HardsubEngine:
             "-movflags", "+faststart",
             os.path.abspath(output_path),
         ]
-
-        dur_sec = 0.0
-        try:
-            meta = self._probe_video_metadata(video_path)
-            dur_sec = float(meta.get("duration") or 0.0)
-        except Exception:
-            pass
-        render_timeout = max(3600, int((dur_sec or 1800.0) * 4.0))
 
         print(f"[*] Rendering with {codec} ({preset}) (timeout={render_timeout}s)...")
         try:

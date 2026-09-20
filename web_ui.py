@@ -2322,6 +2322,10 @@ def preview_subtitle_project(movie_name: str):
 
     srt_file = os.path.join(proj_dir, "05_subtitle_burmese.srt")
     qc_file = os.path.join(proj_dir, "06_quality_check_report.txt")
+    if not os.path.exists(qc_file):
+        alt_qc = os.path.join(proj_dir, "06_translation_qc_report.txt")
+        if os.path.exists(alt_qc):
+            qc_file = alt_qc
     txt_file = os.path.join(proj_dir, "04_transcript_burmese.txt")
     json_file = os.path.join(proj_dir, "records_data.json")
 

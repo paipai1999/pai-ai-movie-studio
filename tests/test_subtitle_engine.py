@@ -7,7 +7,7 @@ import sys
 import unittest
 import tempfile
 import shutil
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 # Add project root to sys.path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -224,6 +224,13 @@ class TestSubtitleEngine(unittest.TestCase):
         evt.set()
         with self.assertRaises(InterruptedError):
             sub_engine._check_cancellation()
+
+    @patch("subprocess.run")
+    def test_whisper_handles_audio_extraction_failure(self, mock_run):
+        """Test that _transcribe_with_whisper returns empty list safely when audio extraction fails (e.g. muted video)."""
+        mock_run.return_value = MagicMock(returncode=1)
+        res = self.engine._transcribe_with_whisper("dummy_video_without_audio.mp4")
+        self.assertEqual(res, [])
 
 
 if __name__ == "__main__":

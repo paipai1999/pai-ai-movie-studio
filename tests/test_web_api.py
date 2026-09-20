@@ -114,6 +114,28 @@ class TestWebAPISecurityAndLifecycle(unittest.TestCase):
             else:
                 os.environ.pop("WEB_UI_PASSWORD", None)
 
+    def test_preview_subtitle_hardsub_qc_report(self):
+        """Verify /api/subtitle/preview/{movie_name} finds 06_translation_qc_report.txt from HardsubEngine."""
+        from web_ui import app
+        from fastapi.testclient import TestClient
+        client = TestClient(app)
+
+        test_proj = os.path.join("outputs", "test_hardsub_qc_proj")
+        os.makedirs(test_proj, exist_ok=True)
+        qc_file = os.path.join(test_proj, "06_translation_qc_report.txt")
+        with open(qc_file, "w", encoding="utf-8") as f:
+            f.write("HARDSUB STUDIO QUALITY CHECK REPORT SAMPLE")
+
+        try:
+            res = client.get("/api/subtitle/preview/test_hardsub_qc_proj")
+            self.assertEqual(res.status_code, 200)
+            data = res.json()
+            self.assertIn("HARDSUB STUDIO QUALITY CHECK REPORT SAMPLE", data.get("qc_report", ""))
+        finally:
+            import shutil
+            if os.path.exists(test_proj):
+                shutil.rmtree(test_proj, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()
